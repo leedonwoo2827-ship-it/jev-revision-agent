@@ -142,7 +142,7 @@ def backups():
         return []
     out = []
     for d in sorted(BACKUP.iterdir(), reverse=True):
-        if not d.is_dir():
+        if not (d / "00_책").is_dir():  # [새 책 넣기]로 만든 책 전체 백업만 (손으로 옮긴 폴더 제외)
             continue
         t = _read(d / "00_책" / "toc.json") or {}
         out.append({"name": d.name, "book": t.get("book"),
@@ -154,7 +154,7 @@ def restore(name):
     """백업을 워크스페이스로 되돌린다. 지금 작업은 먼저 백업한다."""
     import shutil
     src = BACKUP / name
-    if not src.is_dir() or src.parent != BACKUP:
+    if not (src / "00_책").is_dir() or src.parent != BACKUP:
         raise ValueError(f"백업이 없습니다: {name}")
     saved = backup_current()
     if WS.exists():
