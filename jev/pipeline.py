@@ -25,7 +25,7 @@ def main():
     judge_codex.run(a.chapter, workers=a.workers, model=a.model, limit=a.limit)
     report.run(a.chapter)
     if a.serve:
-        server.serve(a.chapter)
+        server.serve()
 
 
 if __name__ == "__main__":

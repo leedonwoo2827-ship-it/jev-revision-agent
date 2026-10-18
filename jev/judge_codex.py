@@ -184,6 +184,7 @@ def run(ch, workers=3, model=None, limit=None):
                 print(f"  [오류] {chg['id']}: {e}")
                 return chg, {"summary_of_change": f"판정 실패: {e}", "items": []}, True
             cf.write_text(json.dumps(res, ensure_ascii=False, indent=1), encoding="utf-8")
+            print(f"  [판정] {chg['id']} → {len(res['items'])}건")
         return chg, res, False
 
     print(f"[judge] 변경 조문 {len(changes)}건을 Codex로 판정 (동시 {workers})")

@@ -55,6 +55,7 @@ tr.off td{opacity:.55}
 .tag{font-size:12px;border:1px solid var(--line);border-radius:10px;padding:0 6px;white-space:nowrap}
 </style></head>
 <body><div class="wrap">
+<a href="/" style="font-size:13px">← 콘솔</a>
 <h1 id="h"></h1>
 <div class="mute">JEV 판정 — <b>J</b>udge(영향유형) · <b>E</b>vidence(교재/구·신 조문 인용) · <b>V</b>erdict(수정확률·수정문구). 수정확률 ≥ <span id="th"></span>% 항목이 기본 체크됩니다.</div>
 <div class="laws" id="laws"></div>

@@ -1,5 +1,7 @@
 # 장별 설정. 새 장을 추가할 때는 이 파일에 블록 하나만 더 쓰면 됩니다.
 # 경로는 프로젝트 폴더 기준. old/new 는 glob 허용 (확장자 .pdf / .hwpx / .txt 지원)
+# fetch_name / old_version 은 웹 콘솔의 [법제처에서 받기]에 쓰입니다.
+#   old_version = "법령번호,공포일자" (책 p.11 [법령적용기준]에 적힌 버전)
 
 book_pdf: "_context/2025 경영지도사 1차_중소기업관계법령(1교).pdf"
 baseline_page: 11          # [법령적용기준] 이 있는 쪽
@@ -13,7 +15,11 @@ chapters:
         abbr: 법
         old: "_context/law_old_법.*"
         new: "_context/law_new_법.*"
+        fetch_name: 소상공인기본법
+        old_version: "17623,20201208"
       - name: 소상공인기본법 시행령
         abbr: 영
         old: "_context/law_old_령.*"
         new: "_context/law_new_령.*"
+        fetch_name: 소상공인기본법시행령
+        old_version: "32274,20211228"

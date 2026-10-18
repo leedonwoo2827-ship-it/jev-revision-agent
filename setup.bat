@@ -12,7 +12,7 @@ where codex >nul 2>nul || (
   call npm install -g @openai/codex
 )
 echo [3/4] Codex OAuth 로그인 확인
-call codex login status | findstr /i "Logged in" >nul || (
+call codex login status >nul 2>nul || (
   echo 브라우저가 열리면 ChatGPT 계정으로 로그인하세요.
   call codex login
 )

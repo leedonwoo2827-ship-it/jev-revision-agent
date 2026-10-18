@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>JEV 정오표 콘솔</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--fg:#1d2433;--mute:#5b6475;--line:#d9dee7;--head:#f2f5f9;--acc:#1f5eff;--ok:#05603a;--okbg:#e3f6ea;--bad:#b42318;--badbg:#fde8e7;--log:#0f1720;--logfg:#d6e2f0}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1216;--card:#171b21;--fg:#e6e9ef;--mute:#9aa3b2;--line:#2c323c;--head:#1c2027;--acc:#6e9bff;--ok:#56d364;--okbg:#16301f;--bad:#ff7b72;--badbg:#3a1d1d;--log:#0a0d11;--logfg:#c9d6e5}}
+:root[data-theme="dark"]{--bg:#0f1216;--card:#171b21;--fg:#e6e9ef;--mute:#9aa3b2;--line:#2c323c;--head:#1c2027;--acc:#6e9bff;--ok:#56d364;--okbg:#16301f;--bad:#ff7b72;--badbg:#3a1d1d;--log:#0a0d11;--logfg:#c9d6e5}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.55 "Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif}
+.wrap{max-width:1100px;margin:0 auto;padding:20px 16px 60px}
+header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+h1{font-size:20px;margin:0}
+.mute{color:var(--mute)}
+select,button{font:inherit}
+select{padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--fg)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin:12px 0}
+.card h2{font-size:15px;margin:0 0 10px;display:flex;align-items:center;gap:8px}
+.step{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--acc);color:#fff;font-size:12px}
+button{border:1px solid var(--line);background:var(--head);color:var(--fg);border-radius:6px;padding:6px 12px;cursor:pointer}
+button.primary{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:700}
+button:disabled{opacity:.5;cursor:not-allowed}
+.slots{display:grid;gap:8px}
+.slot{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;border:1px dashed var(--line);border-radius:8px;padding:10px 12px}
+.slot.drag{border-color:var(--acc);background:var(--head)}
+.slot .name{font-weight:600}
+.slot .file{font-size:13px;word-break:break-all}
+.ok{color:var(--ok)} .bad{color:var(--bad)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.bar{height:8px;background:var(--line);border-radius:4px;overflow:hidden;margin:10px 0 6px}
+.bar i{display:block;height:100%;width:0;background:var(--acc);transition:width .3s}
+pre#log{background:var(--log);color:var(--logfg);border-radius:8px;padding:10px 12px;height:240px;overflow:auto;font:12.5px/1.5 Consolas,"D2Coding",monospace;white-space:pre-wrap;margin:0}
+.kpis{display:flex;gap:10px;flex-wrap:wrap;margin:6px 0 12px}
+.kpi{border:1px solid var(--line);border-radius:8px;padding:8px 14px;min-width:120px}
+.kpi b{display:block;font-size:20px}
+table{border-collapse:collapse;width:100%}
+td,th{border-bottom:1px solid var(--line);padding:6px 4px;text-align:left;font-size:13px;vertical-align:top}
+a{color:var(--acc)}
+.tag{font-size:11.5px;border-radius:10px;padding:1px 7px;background:var(--okbg);color:var(--ok);white-space:nowrap}
+#toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:8px 14px;border-radius:8px;display:none;max-width:90vw}
+.laws{font-size:12.5px;line-height:1.7}
+@media (max-width:600px){.slot{grid-template-columns:1fr}}
+</style></head>
+<body><div class="wrap">
+<header>
+  <h1>JEV 정오표 콘솔</h1>
+  <label class="mute">장 <select id="ch" onchange="changeCh()"></select></label>
+  <span class="mute" id="chinfo"></span>
+</header>
+<div class="mute">법령 개정 → 우리 교재 수정 판정 (Judge · Evidence · Verdict, Codex OAuth)</div>
+
+<div class="card">
+  <h2><span class="step">1</span>입력 파일 <span class="mute" style="font-weight:400">— 칸에 파일을 끌어다 놓거나 [선택]</span></h2>
+  <div class="slots" id="slots"></div>
+  <div class="row" style="margin-top:10px">
+    <button id="btnFetch" onclick="post('/api/fetch')">법제처에서 법령 받기 (구·신 자동)</button>
+    <span class="mute" style="font-size:12.5px">직접 저장한 PDF/HWPX가 있으면 그 파일이 우선 사용됩니다.</span>
+  </div>
+</div>
+
+<div class="card">
+  <h2><span class="step">2</span>판정 실행</h2>
+  <div class="row">
+    <button class="primary" id="btnRun" onclick="post('/api/run')">판정 시작</button>
+    <span id="jobinfo" class="mute"></span>
+  </div>
+  <div class="bar"><i id="prog"></i></div>
+  <pre id="log">대기 중</pre>
+</div>
+
+<div class="card">
+  <h2><span class="step">3</span>검토 · 반영</h2>
+  <div id="summary" class="mute">아직 판정 결과가 없습니다.</div>
+</div>
+
+<div class="card">
+  <h2><span class="step">4</span>반영 파일 <span class="mute" style="font-weight:400">— 게시판에는 <b>정오표_게시판_*.html</b> 을 올리세요</span></h2>
+  <div id="applied" class="mute">아직 반영한 내역이 없습니다.</div>
+</div>
+</div>
+<div id="toast"></div>
+
+<script>
+let CH = new URLSearchParams(location.search).get("ch") || "ch09";
+let S = null, timer = null, wasRunning = false;
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const kb = n => n > 1048576 ? (n/1048576).toFixed(1)+"MB" : Math.max(1, Math.round(n/1024))+"KB";
+function toast(t){ const e=$("toast"); e.textContent=t; e.style.display="block"; clearTimeout(e._t); e._t=setTimeout(()=>e.style.display="none",3500) }
+
+async function load(){
+  try{
+    const r = await fetch("/api/state?ch="+CH); S = await r.json();
+    if(S.error){ toast(S.error); return }
+    render();
+  }catch(e){ $("log").textContent = "서버에 연결할 수 없습니다. run.bat 창이 열려 있는지 확인하세요." }
+  clearTimeout(timer); timer = setTimeout(load, S && S.job.running ? 1000 : 5000);
+}
+
+function render(){
+  $("ch").innerHTML = S.chapters.map(c=>`<option value="${c.id}" ${c.id===CH?"selected":""}>${c.id} ${esc(c.title)}</option>`).join("");
+  const cur = S.chapters.find(c=>c.id===CH); $("chinfo").textContent = cur ? `교재 p.${cur.pages[0]}–${cur.pages[1]}` : "";
+
+  $("slots").innerHTML = S.slots.map(s=>`
+    <div class="slot" data-slot="${s.slot}">
+      <div><div class="name">${esc(s.label)}${s.hint && s.hint!=="현행" ? ` <span class="mute" style="font-weight:400">(${esc(s.hint)})</span>`:""}</div>
+      <div class="file">${s.file ? `<span class="ok">✔ ${esc(s.file)}</span> <span class="mute">${kb(s.size)}</span>` : `<span class="bad">✖ 없음</span> <span class="mute">${s.exts.join(" / ")}</span>`}</div></div>
+      <div><label><input type="file" accept="${s.exts.join(",")}" hidden onchange="upload('${s.slot}', this.files[0])"><button type="button" onclick="this.previousElementSibling.click()">선택</button></label></div>
+    </div>`).join("");
+  document.querySelectorAll(".slot").forEach(el=>{
+    el.ondragover = e=>{e.preventDefault(); el.classList.add("drag")};
+    el.ondragleave = ()=>el.classList.remove("drag");
+    el.ondrop = e=>{e.preventDefault(); el.classList.remove("drag"); if(e.dataTransfer.files[0]) upload(el.dataset.slot, e.dataTransfer.files[0])};
+  });
+
+  const j = S.job, mine = j.ch === CH;
+  $("btnRun").disabled = $("btnFetch").disabled = j.running;
+  $("jobinfo").innerHTML = j.name ? `${esc(j.name)} (${esc(j.ch)}) · ${j.running ? "실행 중… "+j.started : (j.error ? `<span class="bad">중단 ${j.ended}</span>` : `<span class="ok">완료 ${j.ended}</span>`)}` : "";
+  if(j.log.length){
+    const lg = $("log"), atBottom = lg.scrollTop + lg.clientHeight >= lg.scrollHeight - 20;
+    lg.textContent = j.log.join("\n"); if(atBottom) lg.scrollTop = lg.scrollHeight;
+  }
+  // 진행률: "[judge] 변경 조문 N건" 대비 [판정]/[cache]/[오류] 줄 수
+  let pct = 0;
+  if(j.name === "판정 실행"){
+    const tot = j.log.map(l=>l.match(/변경 조문 (\d+)건을 Codex/)).find(Boolean);
+    const done = j.log.filter(l=>/^\s*\[(판정|cache|오류)\]/.test(l)).length;
+    pct = !j.running && !j.error ? 100 : tot ? Math.min(98, 10 + 85*done/(+tot[1]||1)) : (j.running ? 5 : 0);
+  } else if(j.name){ pct = j.running ? 50 : 100 }
+  $("prog").style.width = pct + "%";
+  if(wasRunning && !j.running) toast(j.error ? "작업 중단: "+j.error : j.name+" 완료");
+  wasRunning = j.running;
+
+  const s = S.summary;
+  $("summary").innerHTML = s ? `
+    <div class="laws">${s.laws.map(l=>`${esc(l.name)}: ${esc(l.old_header)} → <b>${esc(l.new_header)}</b>`).join("<br>")}</div>
+    <div class="kpis">
+      <div class="kpi"><span class="mute">변경 조문</span><b>${s.changes}</b></div>
+      <div class="kpi"><span class="mute">책 영향 후보</span><b>${s.rows}</b></div>
+      <div class="kpi"><span class="mute">수정 권고</span><b>${s.revise}</b></div>
+      <div class="kpi"><span class="mute">그대로 둠</span><b>${s.rows - s.revise}</b></div>
+      ${s.failed ? `<div class="kpi"><span class="mute">판정 실패</span><b class="bad">${s.failed}</b></div>` : ""}
+    </div>
+    <div class="row"><a href="/review/${CH}" target="_blank"><button class="primary">검토 화면 열기 → 체크 후 [반영]</button></a>
+    <span class="mute">판정 ${esc(s.updated)}</span></div>` : "아직 판정 결과가 없습니다. 1단계 파일을 채우고 [판정 시작]을 누르세요.";
+
+  $("applied").innerHTML = S.applied.length ? `<table><thead><tr><th>파일</th><th>시각</th><th></th></tr></thead><tbody>${
+    S.applied.map(f=>`<tr><td>${esc(f.name)} ${f.name.startsWith("정오표_게시판")?'<span class="tag">게시판용</span>':""}</td><td class="mute">${f.time}</td>
+    <td style="white-space:nowrap"><a href="/files/${encodeURI(f.path)}" target="_blank">보기</a> · <a href="/files/${encodeURI(f.path)}?dl=1">내려받기</a></td></tr>`).join("")}</tbody></table>`
+    : "아직 반영한 내역이 없습니다.";
+}
+
+async function upload(slot, file){
+  if(!file) return;
+  toast(`${file.name} 올리는 중…`);
+  const r = await fetch(`/api/upload?ch=${CH}&slot=${slot}`, {method:"POST", headers:{"X-Filename":encodeURIComponent(file.name)}, body:file});
+  const j = await r.json(); toast(j.ok ? `저장됨: _context/${j.saved}` : "실패: "+j.error); load();
+}
+async function post(url){
+  const r = await fetch(url+"?ch="+CH, {method:"POST"}); const j = await r.json();
+  if(!j.ok) toast(j.error); load();
+}
+function changeCh(){ CH = $("ch").value; history.replaceState(null,"","?ch="+CH); load() }
+load();
+</script></body></html>
