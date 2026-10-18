@@ -358,7 +358,7 @@ window.addEventListener("drop", e=>{ e.preventDefault();
   if(f && route().view==="book" && /\.pdf$/i.test(f.name)) uploadBook(f);
   else if(f) toast("파일은 점선 칸이나 '비교 자료' 카드 위에 놓아 주세요.");
 });
-window.addEventListener("message", e=>{ if(e.data && e.data.jev==="applied"){ toast("반영 완료 — 4 반영 파일에 추가되었습니다."); refresh() } });
+window.addEventListener("message", e=>{ if(e.data && e.data.jev==="applied"){ toast(`반영 완료 — 체크한 ${e.data.checked ?? ""}건 처리. 아래 '④ 반영 파일'에서 확인하세요.`, 6000); refresh() } });
 window.addEventListener("hashchange", ()=>{ chRendered=null; CHS=null; refresh().then(()=>renderView(true)) });
 refresh().then(()=>renderView(true));
 </script></body></html>

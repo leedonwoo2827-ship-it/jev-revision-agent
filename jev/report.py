@@ -126,9 +126,13 @@ async function applyNow(){
     const r=await fetch("/apply",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
     if(!r.ok){show("반영 실패: "+await r.text());return}
     const j=await r.json();
-    try{parent.postMessage({jev:"applied"},"*")}catch(e){}
-    show(`반영 완료: 체크 ${j.counts.checked}건 / 원고 반영 ${j.counts.applied}건\n\n생성 파일:\n`+j.files.join("\n")+
-      (j.manual.length?`\n\n수동 반영 필요 ${j.manual.length}건: `+j.manual.map(m=>"#"+m.id+"(p."+m.page+")").join(", "):""));
+    const outside=j.manual.filter(m=>m.status.startsWith("반영")), hand=j.manual.filter(m=>!m.status.startsWith("반영"));
+    try{parent.postMessage({jev:"applied",checked:j.counts.checked},"*")}catch(e){}
+    show(`반영 완료 — 체크한 ${j.counts.checked}건 모두 처리했습니다.\n`+
+      `· 이 장 원고에 반영: ${j.counts.applied}건\n`+
+      (outside.length?`· 장 밖 쪽에 반영: ${outside.length}건 (`+outside.map(m=>"p."+m.page).join(", ")+` — 반영본 끝과 정오표에 따로 적음)\n`:"")+
+      (hand.length?`· 직접 확인 필요: ${hand.length}건 (`+hand.map(m=>"#"+m.id+" p."+m.page).join(", ")+` — 원문 위치를 못 찾음)\n`:"")+
+      `\n생성 파일 (05_반영):\n`+j.files.map(f=>f.split(/[\\/]/).pop()).join("\n"));
   }catch(e){
     // 서버 없이 연 경우(게시판 첨부 등): 결정 파일을 내려받아 `python -m jev.apply` 로 처리
     const a=document.createElement("a");
