@@ -7,14 +7,13 @@ from . import config
 THRESHOLD = 0.6  # 기본 체크 기준 (수정확률)
 
 
-def run(ch):
-    wd = config.workdir(ch)
-    res = json.loads((wd / "results.json").read_text(encoding="utf-8"))
-    config.OUTPUT.mkdir(exist_ok=True)
+def run(cid):
+    ch = cid
+    res = json.loads((config.stage(cid, "03_판정") / "results.json").read_text(encoding="utf-8"))
     data = json.dumps(res, ensure_ascii=False).replace("</", "<\\/")
-    page = TEMPLATE.replace("__TITLE__", html.escape(f"정오표 검토 — {res['title']}")) \
+    page = TEMPLATE.replace("__TITLE__", html.escape(f"검토 내역 — {res['title']}")) \
                    .replace("__CH__", ch).replace("__THRESHOLD__", str(THRESHOLD)).replace("__DATA__", data)
-    out = config.OUTPUT / f"errata_{ch}.html"
+    out = config.stage(cid, "04_검토") / f"검토_ch{cid}.html"
     out.write_text(page, encoding="utf-8")
     print(f"[report] {out}")
     return out
@@ -55,7 +54,6 @@ tr.off td{opacity:.55}
 .tag{font-size:12px;border:1px solid var(--line);border-radius:10px;padding:0 6px;white-space:nowrap}
 </style></head>
 <body><div class="wrap">
-<a href="/" style="font-size:13px">← 콘솔</a>
 <h1 id="h"></h1>
 <div class="mute">JEV 판정 — <b>J</b>udge(영향유형) · <b>E</b>vidence(교재/구·신 조문 인용) · <b>V</b>erdict(수정확률·수정문구). 수정확률 ≥ <span id="th"></span>% 항목이 기본 체크됩니다.</div>
 <div class="laws" id="laws"></div>
@@ -71,7 +69,7 @@ tr.off td{opacity:.55}
 <div class="tbl"><table>
 <thead><tr><th>반영</th><th>#</th><th>쪽</th><th>관련 조문</th><th>유형</th><th>수정확률</th><th>유지확률</th><th style="width:22%">기존문구</th><th style="width:24%">수정문구 (편집 가능)</th><th style="width:20%">근거</th></tr></thead>
 <tbody id="tb"></tbody></table></div>
-<h2 style="font-size:16px;margin-top:28px">변경 조문 전체 (책 영향 없음 포함)</h2>
+<h2 style="font-size:16px;margin-top:28px">대조 단위 전체 (책 영향 없음 포함)</h2>
 <div class="tbl"><table><thead><tr><th>조문</th><th>구분</th><th>책 관련 항목</th><th>변경 요약</th></tr></thead><tbody id="chg"></tbody></table></div>
 </div>
 <script>
@@ -79,7 +77,7 @@ const CH="__CH__", TH=__THRESHOLD__, D=__DATA__;
 const st={}; D.rows.forEach(r=>st[r.id]={apply:r.p_revise>=TH, new_text:r.new_text, note:""});
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 try{document.getElementById("reviewer").value=localStorage.getItem("jev_reviewer")||""}catch(e){}
-document.getElementById("h").textContent=`정오표 검토 — CHAPTER ${CH.slice(2)} ${D.title}`;
+document.getElementById("h").textContent=`검토 내역 — CHAPTER ${CH} ${D.title}`;
 document.getElementById("th").textContent=Math.round(TH*100);
 document.getElementById("laws").innerHTML=D.laws.map(l=>`${esc(l.name)}: ${esc(l.old_header)} → <b>${esc(l.new_header)}</b>`).join("<br>");
 function kpis(){
@@ -126,16 +124,17 @@ async function applyNow(){
   if(!body.items.some(i=>i.apply)){show("체크된 항목이 없습니다.");return}
   try{
     const r=await fetch("/apply",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
-    if(!r.ok) throw new Error(await r.text());
+    if(!r.ok){show("반영 실패: "+await r.text());return}
     const j=await r.json();
+    try{parent.postMessage({jev:"applied"},"*")}catch(e){}
     show(`반영 완료: 체크 ${j.counts.checked}건 / 원고 반영 ${j.counts.applied}건\n\n생성 파일:\n`+j.files.join("\n")+
       (j.manual.length?`\n\n수동 반영 필요 ${j.manual.length}건: `+j.manual.map(m=>"#"+m.id+"(p."+m.page+")").join(", "):""));
   }catch(e){
     // 서버 없이 연 경우(게시판 첨부 등): 결정 파일을 내려받아 `python -m jev.apply` 로 처리
     const a=document.createElement("a");
     a.href=URL.createObjectURL(new Blob([JSON.stringify(body,null,1)],{type:"application/json"}));
-    a.download=`decisions_${CH}.json`; a.click();
-    show("로컬 서버(run.bat)가 실행 중이 아니어서 결정 파일을 내려받았습니다.\n프로젝트 폴더에서: python -m jev.apply decisions_"+CH+".json");
+    a.download=`decisions_ch${CH}.json`; a.click();
+    show("로컬 서버(run.bat)가 실행 중이 아니어서 결정 파일을 내려받았습니다.\n프로젝트 폴더에서: python -m jev.apply decisions_ch"+CH+".json");
   }
 }
 render();
@@ -144,4 +143,4 @@ render();
 
 if __name__ == "__main__":
     import sys
-    run(sys.argv[1] if len(sys.argv) > 1 else "ch09")
+    run(sys.argv[1] if len(sys.argv) > 1 else "09")

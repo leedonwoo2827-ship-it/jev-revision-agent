@@ -1,16 +1,23 @@
-"""웹 콘솔 서버 (127.0.0.1 전용, 표준 라이브러리만 사용).
+"""JEV 개정 에이전트 — 웹 콘솔 서버 (127.0.0.1 전용, 표준 라이브러리만 사용).
 
-  GET  /                       콘솔 화면 (jev/console.html)
-  GET  /api/state?ch=          장 목록 · 입력파일 상태 · 작업 로그 · 결과/반영 파일
-  POST /api/upload?ch=&slot=   파일 업로드 → _context (본문 = 파일, X-Filename 헤더 = 원래 이름)
-  POST /api/fetch?ch=          법제처에서 구/신 법령 받기 (백그라운드)
-  POST /api/run?ch=            추출 → 비교 → Codex 판정 → 검토 HTML (백그라운드)
-  GET  /review/<ch>            검토 화면 (output/errata_<ch>.html)
-  POST /apply                  [반영]
-  GET  /files/<path>           output/ 아래 파일 내려받기
+  GET  /                         콘솔 화면 (jev/console.html)
+  GET  /api/state                책 · 차례 · 장 목록 · 작업 상태
+  POST /api/book/upload          교재 PDF 전체 올리기 → 차례 자동 추출
+  POST /api/book/toc             차례 확정 (JSON) → 장 워크스페이스 생성
+  POST /api/book/toc-codex       Codex로 차례 다시 뽑기 (백그라운드)
+  GET  /api/ch?id=09             장 상세 (비교자료 칸 · 판정 요약 · 폴더별 파일)
+  POST /api/ch/upload?id=&slot=  비교자료 올리기 (본문 = 파일, X-Filename 헤더)
+  POST /api/ch/config?id=        비교 방식(law/book) · 개정기본서 쪽 범위 저장
+  POST /api/ch/fetch?id=         법제처에서 구·신 법령 받기 (백그라운드)
+  POST /api/ch/run?id=           추출 → 비교 → Codex 판정 → 검토 HTML (백그라운드)
+  POST /api/ch/open?id=&stage=   탐색기로 폴더 열기
+  GET  /review/<id>              검토 내역 화면
+  POST /apply                    [반영]
+  GET  /files/<id>/<stage>/<name>[?dl=1]
 """
 import json
 import mimetypes
+import os
 import sys
 import threading
 import traceback
@@ -20,10 +27,10 @@ from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import apply, config, diff_law, extract_book, fetch_law, judge_codex, report
+from . import apply, config, fetch_law, report, toc
+from .pipeline import run as run_pipeline
 
 CONSOLE = Path(__file__).with_name("console.html")
-EXTS = {".pdf", ".hwpx", ".txt"}
 
 
 class Job:
@@ -44,15 +51,12 @@ class Job:
         return True
 
     def _run(self, fn):
-        real = sys.stdout
-        job = self
+        real, job = sys.stdout, self
 
         class Tee:
             def write(self, s):
                 real.write(s)
-                for line in s.splitlines():
-                    if line.strip():
-                        job.log.append(line)
+                job.log.extend(l for l in s.splitlines() if l.strip())
                 return len(s)
 
             def flush(self):
@@ -83,99 +87,136 @@ class Job:
 JOB = Job()
 
 
-def stem(pattern):
-    """'_context/law_old_령.*' → 'law_old_령' (업로드·받기 파일명을 설정 패턴에 맞춘다)"""
-    return Path(pattern).name.split(".")[0]
+def _mtime(p):
+    return datetime.fromtimestamp(p.stat().st_mtime).strftime("%m-%d %H:%M")
 
 
-def slots(cfg, ch):
-    """업로드 칸: 교재 1 + 법령별 구/신."""
-    c = config.chapter(cfg, ch)
-    out = [{"slot": "book", "label": "교재 PDF (원본 그대로)", "pattern": cfg["book_pdf"], "exts": [".pdf"]}]
-    for law in c["laws"]:
-        for which, tag in (("old", "책 기준 (구)"), ("new", "현행 (신)")):
-            out.append({"slot": stem(law[which]), "label": f"{law['name']} — {tag}",
-                        "pattern": law[which], "exts": sorted(EXTS),
-                        "hint": law.get("old_version", "") if which == "old" else "현행"})
-    for s in out:
-        p = config.ROOT / s["pattern"] if s["slot"] == "book" else config.resolve(s["pattern"])
-        s["file"] = p.name if p and Path(p).exists() else None
-        s["size"] = Path(p).stat().st_size if s["file"] else 0
+def results(cid):
+    f = config.stage(cid, "03_판정") / "results.json"
+    if not f.exists():
+        return None
+    d = json.loads(f.read_text(encoding="utf-8"))
+    rows = d["rows"]
+    return {"mode": d.get("mode", "law"), "changes": len(d["changes"]), "rows": len(rows),
+            "revise": sum(r["p_revise"] >= report.THRESHOLD for r in rows),
+            "failed": sum(c["failed"] for c in d["changes"]), "laws": d["laws"], "updated": _mtime(f)}
+
+
+def chapter_slots(cid, c):
+    out = []
+    for s in config.slots(c):
+        p = config.source(cid, s["slot"])
+        out.append({**s, "file": p.name if p else None, "size": p.stat().st_size if p else 0})
     return out
 
 
-def state(ch):
-    cfg = config.load()
-    wd = config.WORK / ch
-    res = wd / "results.json"
-    summary = None
-    if res.exists():
-        d = json.loads(res.read_text(encoding="utf-8"))
-        rows = d["rows"]
-        summary = {"changes": len(d["changes"]), "rows": len(rows),
-                   "revise": sum(r["p_revise"] >= report.THRESHOLD for r in rows),
-                   "failed": sum(c["failed"] for c in d["changes"]),
-                   "laws": d["laws"],
-                   "updated": datetime.fromtimestamp(res.stat().st_mtime).strftime("%Y-%m-%d %H:%M")}
-    applied = config.OUTPUT / "applied"
-    files = sorted((p for p in applied.glob(f"*{ch}*") if p.is_file()), key=lambda p: -p.stat().st_mtime) \
-        if applied.exists() else []
-    return {"chapters": [{"id": k, "title": v["title"], "pages": v["pages"]} for k, v in cfg["chapters"].items()],
-            "ch": ch, "slots": slots(cfg, ch), "summary": summary,
-            "review": (config.OUTPUT / f"errata_{ch}.html").exists(),
-            "applied": [{"name": p.name, "path": str(p.relative_to(config.OUTPUT)).replace("\\", "/"),
-                         "time": datetime.fromtimestamp(p.stat().st_mtime).strftime("%m-%d %H:%M")} for p in files[:30]],
+def chapter_brief(c):
+    cid = c["id"]
+    sl = chapter_slots(cid, c)
+    r = results(cid)
+    applied = list(config.stage(cid, "05_반영").glob("정오표_게시판_*.html"))
+    return {"id": cid, "title": c["title"], "pages": c["pages"], "mode": c.get("mode", "law"),
+            "kind": c.get("kind", "chapter"), "sources": [sum(bool(s["file"]) for s in sl), len(sl)],
+            "revise": r["revise"] if r else None, "applied": len(applied)}
+
+
+def app_state():
+    pdf = config.book_pdf()
+    return {"workspace": str(config.WS),
+            "book": {"file": pdf.name, "size": pdf.stat().st_size} if pdf else None,
+            "toc": config.toc(),
+            "chapters": [chapter_brief(c) for c in config.chapters()],
             "job": JOB.state()}
 
 
-def do_upload(ch, slot, filename, data):
-    cfg = config.load()
-    s = next((x for x in slots(cfg, ch) if x["slot"] == slot), None)
+def chapter_state(cid):
+    c = config.chapter(cid)
+    d = config.chapter_dir(cid)
+    stages = []
+    for s in config.STAGES:
+        files = sorted((p for p in (d / s).rglob("*") if p.is_file() and "cache" not in p.parts),
+                       key=lambda p: -p.stat().st_mtime)
+        stages.append({"stage": s, "files": [{"name": p.name, "path": str(p.relative_to(d)).replace("\\", "/"),
+                                              "time": _mtime(p), "size": p.stat().st_size} for p in files[:40]]})
+    return {"chapter": c, "dir": str(d), "slots": chapter_slots(cid, c), "summary": results(cid),
+            "review": any((d / "04_검토").glob("*.html")), "stages": stages, "job": JOB.state()}
+
+
+# ---------- 동작 ----------
+def book_upload(filename, data):
+    if Path(filename).suffix.lower() != ".pdf":
+        raise ValueError("교재는 PDF로 올려 주세요.")
+    config.BOOK_DIR.mkdir(parents=True, exist_ok=True)
+    for old in config.BOOK_DIR.glob("*.pdf"):
+        old.unlink()
+    dest = config.BOOK_DIR / Path(filename).name
+    dest.write_bytes(data)
+    t = toc.extract(dest)
+    config.save_toc(t)
+    return t
+
+
+def toc_confirm(body):
+    t = config.toc()
+    if not t:
+        raise ValueError("먼저 교재 PDF를 올려 주세요.")
+    t["chapters"] = body["chapters"]
+    t["confirmed"] = True
+    t["confirmed_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+    config.save_toc(t)
+    made = []
+    existing = {c["id"]: c for c in config.chapters()}
+    for c in t["chapters"]:
+        if not c.get("include"):
+            continue
+        prev = existing.get(c["id"], {})
+        c = {**c, "pages": [int(c["pages"][0]), int(c["pages"][1])],
+             "mode": prev.get("mode", "law" if c.get("laws") else "book"),
+             "ref_pages": prev.get("ref_pages")}
+        made.append(config.save_chapter(c).name)
+    return made
+
+
+def ch_upload(cid, slot, filename, data):
+    c = config.chapter(cid)
+    s = next((x for x in config.slots(c) if x["slot"] == slot), None)
     if not s:
         raise ValueError(f"알 수 없는 칸: {slot}")
     ext = Path(filename).suffix.lower()
     if ext not in s["exts"]:
         raise ValueError(f"{ext} 파일은 받을 수 없습니다. 가능: {', '.join(s['exts'])}  (HWP는 HWPX나 PDF로 저장하세요)")
-    ctx = config.ROOT / "_context"
-    ctx.mkdir(exist_ok=True)
-    if slot == "book":
-        dest = config.ROOT / cfg["book_pdf"]
-    else:
-        for old in ctx.glob(f"{slot}.*"):  # 같은 칸의 다른 형식 파일은 지워 혼동을 막는다
-            old.unlink()
-        dest = ctx / f"{slot}{ext}"
+    d = config.stage(cid, "01_비교자료")
+    for old in d.glob(f"{slot}.*"):
+        old.unlink()
+    dest = d / f"{slot}{ext}"
     dest.write_bytes(data)
-    return dest.name
+    note = ""
+    if slot == "ref_book":  # 개정기본서에서 같은 제목의 장을 찾아 쪽 범위를 잡아 둔다
+        try:
+            rt = toc.extract(dest)
+            key = c["title"].replace(" ", "")
+            hit = next((x for x in rt["chapters"] if x["title"].replace(" ", "") == key), None)
+            if hit:
+                c["ref_pages"] = hit["pages"]
+                note = f"개정기본서에서 같은 장을 찾았습니다: p.{hit['pages'][0]}–{hit['pages'][1]}"
+            else:
+                c["ref_pages"] = None
+                note = f"개정기본서({rt['page_count']}쪽)에서 같은 제목의 장을 못 찾았습니다. 쪽 범위를 지정하세요."
+        except Exception as e:
+            note = f"개정기본서 차례 분석 실패: {e}. 쪽 범위를 지정하세요."
+        config.save_chapter(c)
+    return dest.name, note
 
 
-def do_fetch(ch):
-    c = config.chapter(config.load(), ch)
-    ctx = config.ROOT / "_context"
-    ctx.mkdir(exist_ok=True)
-    for law in c["laws"]:
-        name = law.get("fetch_name") or law["name"]
-        for which, ver in (("new", None), ("old", law.get("old_version"))):
-            if which == "old" and not ver:
-                print(f"[fetch] {law['name']}: chapters.yaml 에 old_version 이 없어 구판은 건너뜀")
-                continue
-            print(f"[fetch] {name} {ver or '(현행)'} 받는 중 ...")
-            text = fetch_law.fetch(name, ver)
-            dest = ctx / f"{stem(law[which])}.txt"
-            dest.write_text(text, encoding="utf-8")
-            others = [p.name for p in ctx.glob(f"{stem(law[which])}.*") if p.suffix.lower() in (".pdf", ".hwpx")]
-            note = f"  (※ {', '.join(others)} 이(가) 있어 그 파일이 우선 사용됩니다)" if others else ""
-            print(f"[fetch] → {dest.name} ({len(text):,}자){note}")
-
-
-def do_run(ch):
-    extract_book.run(ch)
-    _, changes, missing = diff_law.run(ch)
-    if missing:
-        raise SystemExit("법령 파일이 모자랍니다. 위 칸에 올리거나 [법제처에서 받기]를 누르세요.")
-    if not changes:
-        print("[run] 구/신 법령에 차이가 없습니다. 파일 버전을 확인하세요.")
-    judge_codex.run(ch)
-    report.run(ch)
+def ch_config(cid, body):
+    c = config.chapter(cid)
+    if body.get("mode") in ("law", "book"):
+        c["mode"] = body["mode"]
+    if "ref_pages" in body:
+        rp = body["ref_pages"]
+        c["ref_pages"] = [int(rp[0]), int(rp[1])] if rp and rp[0] and rp[1] else None
+    config.save_chapter(c)
+    return c
 
 
 class H(BaseHTTPRequestHandler):
@@ -194,77 +235,105 @@ class H(BaseHTTPRequestHandler):
 
     def _q(self):
         u = urllib.parse.urlparse(self.path)
-        return u.path, {k: v[0] for k, v in urllib.parse.parse_qs(u.query).items()}
+        return urllib.parse.unquote(u.path), {k: v[0] for k, v in urllib.parse.parse_qs(u.query).items()}
 
     def do_GET(self):
         path, q = self._q()
-        ch = q.get("ch", "ch09")
         try:
             if path in ("/", "/index.html"):
                 return self._send(200, CONSOLE.read_bytes(), "text/html; charset=utf-8")
             if path == "/api/state":
-                return self._send(200, state(ch))
+                return self._send(200, app_state())
+            if path == "/api/ch":
+                return self._send(200, chapter_state(q["id"]))
             if path.startswith("/review/"):
-                f = config.OUTPUT / f"errata_{path.split('/')[2]}.html"
-                if f.exists():
+                cid = path.split("/")[2]
+                f = next(iter(sorted(config.stage(cid, "04_검토").glob("*.html"))), None)
+                if f:
                     return self._send(200, f.read_bytes(), "text/html; charset=utf-8")
                 return self._send(404, "아직 판정 결과가 없습니다.", "text/plain; charset=utf-8")
             if path.startswith("/files/"):
-                rel = urllib.parse.unquote(path[len("/files/"):])
-                f = (config.OUTPUT / rel).resolve()
-                if config.OUTPUT.resolve() in f.parents and f.is_file():
+                _, _, cid, rel = path.split("/", 3)
+                base = config.chapter_dir(cid).resolve()
+                f = (base / rel).resolve()
+                if base in f.parents and f.is_file():
                     ctype = mimetypes.guess_type(f.name)[0] or "application/octet-stream"
-                    if ctype.startswith("text/") or f.suffix in (".md", ".csv"):
-                        ctype = ("text/plain" if f.suffix in (".md", ".csv") else ctype) + "; charset=utf-8"
-                    extra = {}
-                    if q.get("dl"):
-                        extra["Content-Disposition"] = "attachment; filename*=UTF-8''" + urllib.parse.quote(f.name)
+                    if f.suffix in (".md", ".csv", ".txt", ".json"):
+                        ctype = "text/plain; charset=utf-8"
+                    elif ctype.startswith("text/"):
+                        ctype += "; charset=utf-8"
+                    extra = {"Content-Disposition": "attachment; filename*=UTF-8''" + urllib.parse.quote(f.name)} \
+                        if q.get("dl") else {}
                     return self._send(200, f.read_bytes(), ctype, extra)
             self._send(404, "not found", "text/plain; charset=utf-8")
         except SystemExit as e:
             self._send(400, {"error": str(e)})
-
-    def do_POST(self):
-        path, q = self._q()
-        ch = q.get("ch", "ch09")
-        body = self.rfile.read(int(self.headers.get("Content-Length", 0) or 0))
-        try:
-            if path == "/api/upload":
-                name = urllib.parse.unquote(self.headers.get("X-Filename", "upload.pdf"))
-                saved = do_upload(ch, q.get("slot", ""), name, body)
-                return self._send(200, {"ok": True, "saved": saved})
-            if path == "/api/fetch":
-                ok = JOB.start("법제처에서 받기", ch, lambda: do_fetch(ch))
-                return self._send(200 if ok else 409, {"ok": ok, "error": None if ok else "다른 작업이 실행 중입니다."})
-            if path == "/api/run":
-                ok = JOB.start("판정 실행", ch, lambda: do_run(ch))
-                return self._send(200 if ok else 409, {"ok": ok, "error": None if ok else "다른 작업이 실행 중입니다."})
-            if path == "/apply":
-                d = json.loads(body)
-                return self._send(200, apply.run(d, d.get("chapter", ch)))
-            self._send(404, {"error": "not found"})
-        except (ValueError, SystemExit) as e:
-            self._send(400, {"error": str(e)})
         except Exception as e:
             traceback.print_exc()
             self._send(500, {"error": f"{type(e).__name__}: {e}"})
+
+    def do_POST(self):
+        path, q = self._q()
+        cid = q.get("id")
+        body = self.rfile.read(int(self.headers.get("Content-Length", 0) or 0))
+        fname = urllib.parse.unquote(self.headers.get("X-Filename", "upload.pdf"))
+        busy = {"ok": False, "error": "다른 작업이 실행 중입니다. 끝난 뒤 다시 누르세요."}
+        try:
+            if path == "/api/book/upload":
+                if JOB.running:
+                    return self._send(409, busy)
+                return self._send(200, {"ok": True, "toc": book_upload(fname, body)})
+            if path == "/api/book/toc":
+                return self._send(200, {"ok": True, "made": toc_confirm(json.loads(body))})
+            if path == "/api/book/toc-codex":
+                pdf = config.book_pdf()
+                if not pdf:
+                    raise ValueError("먼저 교재 PDF를 올려 주세요.")
+                ok = JOB.start("Codex로 차례 뽑기", None, lambda: (config.save_toc(toc.codex_extract(pdf)),
+                                                                print("[차례] Codex 결과를 불러왔습니다. 확인 후 확정하세요.")))
+                return self._send(200 if ok else 409, {"ok": True} if ok else busy)
+            if path == "/api/ch/upload":
+                saved, note = ch_upload(cid, q.get("slot", ""), fname, body)
+                return self._send(200, {"ok": True, "saved": saved, "note": note})
+            if path == "/api/ch/config":
+                return self._send(200, {"ok": True, "chapter": ch_config(cid, json.loads(body))})
+            if path == "/api/ch/fetch":
+                ok = JOB.start("법제처에서 법령 받기", cid, lambda: fetch_law.fetch_chapter(cid))
+                return self._send(200 if ok else 409, {"ok": True} if ok else busy)
+            if path == "/api/ch/run":
+                ok = JOB.start("개정사항 판정", cid, lambda: run_pipeline(cid))
+                return self._send(200 if ok else 409, {"ok": True} if ok else busy)
+            if path == "/api/ch/open":
+                d = config.chapter_dir(cid) / q.get("stage", "")
+                os.startfile(str(d if d.exists() else config.chapter_dir(cid)))
+                return self._send(200, {"ok": True})
+            if path == "/apply":
+                d = json.loads(body)
+                return self._send(200, apply.run(d, d.get("chapter")))
+            self._send(404, {"error": "not found"})
+        except (ValueError, KeyError, SystemExit) as e:
+            self._send(400, {"ok": False, "error": str(e)})
+        except Exception as e:
+            traceback.print_exc()
+            self._send(500, {"ok": False, "error": f"{type(e).__name__}: {e}"})
 
     def log_message(self, *a):
         pass
 
 
 def serve(port=8765, open_browser=True):
+    url = f"http://127.0.0.1:{port}/"
     try:
         httpd = ThreadingHTTPServer(("127.0.0.1", port), H)
     except OSError:
-        url = f"http://127.0.0.1:{port}/"
         print(f"[server] 이미 실행 중인 것 같습니다 → {url}")
         if open_browser:
             webbrowser.open(url)
         return
-    url = f"http://127.0.0.1:{port}/"
-    print(f"[server] 웹 콘솔: {url}")
-    print("[server] 이 창을 닫으면 콘솔도 멈춥니다. (종료: Ctrl+C)")
+    config.WS.mkdir(parents=True, exist_ok=True)
+    print(f"[JEV 개정 에이전트] {url}")
+    print(f"[JEV 개정 에이전트] 워크스페이스: {config.WS}")
+    print("이 창을 닫으면 콘솔도 멈춥니다. (종료: Ctrl+C)")
     if open_browser:
         webbrowser.open(url)
     try:

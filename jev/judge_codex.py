@@ -73,6 +73,30 @@ PROMPT = """너는 수험서 법령 교재의 개정 검수 편집자다. 아래
 """
 
 
+BOOK_PROMPT = """너는 수험서 법령 교재의 개정 검수 편집자다. [우리 교재 구간]을 [신규 개정기본서]와 대조하라.
+개정기본서가 최신 법령 기준이다. 우리 교재 서술 중 개정기본서와 달라(구 법령 기준으로 남아) 고쳐야 할 곳을 JEV 방식으로 판정하라.
+
+- J(Judge): 영향유형(수치변경/용어변경/내용변경/신설조문누락/삭제조문잔존/무관)
+- E(Evidence): book_quote(우리 교재 원문), old_law_quote(개정기본서에 남은 같은 취지의 이전 표현이 있으면, 없으면 ""),
+  new_law_quote(개정기본서의 대응 서술 인용)
+- V(Verdict): p_revise = 우리 문구를 고쳐야 할 확률(0~1). old_text = 우리 교재에서 바꿀 부분을 원문 그대로(15~120자, 구간 안에서 유일),
+  new_text = 대체 문구(우리 교재 문체 유지). reason = 판단 근거.
+
+규칙:
+1. 이 구간(p.{s}–{e})의 문구만 다룬다. old_text 는 한 줄~한 문장 단위로 짧게, 항목끼리 겹치지 않게.
+2. 단순 문체·표현 차이(같은 뜻)는 무관으로 보고 낮은 p_revise 를 주거나 생략한다. 수치·기관명·용어·요건·절차가 다를 때만 높게.
+3. 개정기본서에 있는데 우리 구간 주제에 빠진 새 내용은 신설조문누락으로 낸다(old_text 는 넣을 위치 바로 앞 문장).
+4. 기본문제·정답해설에서 정답이 바뀌는 지문은 반드시 포함한다. 지어내지 마라. page 는 [p.N] 표시를 따른다.
+5. 파일을 읽거나 명령을 실행하지 말고, 이 프롬프트만으로 답하라.
+
+[우리 교재 구간: {ch_title} p.{s}–{e}]
+{part}
+
+[신규 개정기본서]
+{ref}
+"""
+
+
 def codex_bin():
     exe = shutil.which("codex") or shutil.which("codex.cmd")
     if not exe:
@@ -80,10 +104,10 @@ def codex_bin():
     return exe
 
 
-def ask_codex(prompt, model=None, timeout=600):
+def ask_codex(prompt, model=None, timeout=900, schema=None):
     with tempfile.TemporaryDirectory() as td:
         td = Path(td)
-        (td / "schema.json").write_text(json.dumps(SCHEMA, ensure_ascii=False), encoding="utf-8")
+        (td / "schema.json").write_text(json.dumps(schema or SCHEMA, ensure_ascii=False), encoding="utf-8")
         cmd = [codex_bin(), "exec", "--skip-git-repo-check", "--ephemeral", "-s", "read-only",
                "-C", str(td), "--output-schema", str(td / "schema.json"),
                "-o", str(td / "out.json"), "--color", "never", "-"]
@@ -96,9 +120,10 @@ def ask_codex(prompt, model=None, timeout=600):
         return json.loads(out.read_text(encoding="utf-8"))
 
 
-def baseline_item(ch, laws):
+def baseline_item(cid, laws):
     """[법령적용기준] 줄 갱신 — 규칙 기반, 항상 수정."""
-    base = json.loads((config.workdir(ch) / "baseline.json").read_text(encoding="utf-8"))
+    f = config.stage(cid, "00_원고") / "baseline.json"
+    base = json.loads(f.read_text(encoding="utf-8")) if f.exists() else []
     items = []
     for b in base:
         law = next((l for l in laws if l["name"] == b["law"]), None)
@@ -154,23 +179,31 @@ def dedupe(rows):
     return out
 
 
-def run(ch, workers=3, model=None, limit=None):
-    cfg = config.load()
-    c = config.chapter(cfg, ch)
-    wd = config.workdir(ch)
-    cache = wd / "cache"
+def run(cid, workers=3, model=None, limit=None):
+    c = config.chapter(cid)
+    jd = config.stage(cid, "03_판정")
+    cache = jd / "cache"
     cache.mkdir(exist_ok=True)
-    book = json.loads((wd / "book.json").read_text(encoding="utf-8"))
-    ch_data = json.loads((wd / "changes.json").read_text(encoding="utf-8"))
+    book = json.loads((config.stage(cid, "00_원고") / "book.json").read_text(encoding="utf-8"))
+    ch_data = json.loads((config.stage(cid, "02_변경목록") / "changes.json").read_text(encoding="utf-8"))
+    book_mode = ch_data.get("mode") == "book"
     changes = ch_data["changes"][:limit] if limit else ch_data["changes"]
     book_text = "".join(f"\n[p.{p['page']}]\n{p['text']}" for p in book["pages"])
 
-    def one(chg):
+    def make_prompt(chg):
+        if book_mode:
+            s, e = chg["pages"]
+            part = "".join(f"\n[p.{p['page']}]\n{p['text']}" for p in book["pages"] if s <= p["page"] <= e)
+            return BOOK_PROMPT.format(s=s, e=e, ch_title=c["title"], part=part,
+                                      ref=ch_data["laws"][0]["ref_text"])
         hint = [p["page"] for p in book["pages"]
                 if f"{chg['abbr']} {chg['article']}" in p["law_refs"]] or "없음"
-        prompt = PROMPT.format(hint=hint, law=chg["law"], article=chg["article"], title=chg["title"],
-                               kind=chg["kind"], old=chg["old"] or "(없음)", new=chg["new"] or "(없음)",
-                               diff=chg["diff"], ch_title=c["title"], book=book_text)
+        return PROMPT.format(hint=hint, law=chg["law"], article=chg["article"], title=chg["title"],
+                             kind=chg["kind"], old=chg["old"] or "(없음)", new=chg["new"] or "(없음)",
+                             diff=chg["diff"], ch_title=c["title"], book=book_text)
+
+    def one(chg):
+        prompt = make_prompt(chg)
         key = hashlib.sha1(prompt.encode("utf-8")).hexdigest()[:12]
         cf = cache / f"{chg['id']}_{key}.json"
         if cf.exists():
@@ -180,18 +213,18 @@ def run(ch, workers=3, model=None, limit=None):
             print(f"  [codex] {chg['id']} ({chg['kind']}) ...", flush=True)
             try:
                 res = ask_codex(prompt, model=model)
-            except Exception as e:  # 한 조문 실패가 전체를 막지 않게
+            except Exception as e:  # 한 단위 실패가 전체를 막지 않게
                 print(f"  [오류] {chg['id']}: {e}")
                 return chg, {"summary_of_change": f"판정 실패: {e}", "items": []}, True
             cf.write_text(json.dumps(res, ensure_ascii=False, indent=1), encoding="utf-8")
             print(f"  [판정] {chg['id']} → {len(res['items'])}건")
         return chg, res, False
 
-    print(f"[judge] 변경 조문 {len(changes)}건을 Codex로 판정 (동시 {workers})")
+    print(f"[판정] 대조 단위 {len(changes)}건을 Codex로 판정 (동시 {workers})")
     with ThreadPoolExecutor(max_workers=workers) as ex:
         results = list(ex.map(one, changes))
 
-    rows = baseline_item(ch, ch_data["laws"])
+    rows = [] if book_mode else baseline_item(cid, ch_data["laws"])
     summaries = []
     for chg, res, failed in results:
         summaries.append({"change_id": chg["id"], "law": chg["law"], "article": chg["article"],
@@ -209,13 +242,14 @@ def run(ch, workers=3, model=None, limit=None):
         r["p_keep"] = round(1 - r["p_revise"], 2)
     rows.sort(key=lambda r: r["id"])
 
-    out = {"chapter": ch, "title": c["title"], "laws": ch_data["laws"],
+    laws = [{k: v for k, v in l.items() if k != "ref_text"} for l in ch_data["laws"]]
+    out = {"chapter": cid, "title": c["title"], "mode": ch_data.get("mode", "law"), "laws": laws,
            "changes": summaries, "rows": rows}
-    (wd / "results.json").write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding="utf-8")
-    print(f"[judge] 정오표 후보 {len(rows)}건 → {wd / 'results.json'}")
+    (jd / "results.json").write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding="utf-8")
+    print(f"[판정] 검토 후보 {len(rows)}건 → {jd / 'results.json'}")
     return out
 
 
 if __name__ == "__main__":
     import sys
-    run(sys.argv[1] if len(sys.argv) > 1 else "ch09")
+    run(sys.argv[1] if len(sys.argv) > 1 else "09")

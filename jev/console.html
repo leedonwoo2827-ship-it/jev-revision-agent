@@ -1,165 +1,342 @@
 <!doctype html>
 <html lang="ko"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>JEV 정오표 콘솔</title>
+<title>JEV 개정 에이전트</title>
 <style>
-:root{--bg:#f6f7f9;--card:#fff;--fg:#1d2433;--mute:#5b6475;--line:#d9dee7;--head:#f2f5f9;--acc:#1f5eff;--ok:#05603a;--okbg:#e3f6ea;--bad:#b42318;--badbg:#fde8e7;--log:#0f1720;--logfg:#d6e2f0}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1216;--card:#171b21;--fg:#e6e9ef;--mute:#9aa3b2;--line:#2c323c;--head:#1c2027;--acc:#6e9bff;--ok:#56d364;--okbg:#16301f;--bad:#ff7b72;--badbg:#3a1d1d;--log:#0a0d11;--logfg:#c9d6e5}}
-:root[data-theme="dark"]{--bg:#0f1216;--card:#171b21;--fg:#e6e9ef;--mute:#9aa3b2;--line:#2c323c;--head:#1c2027;--acc:#6e9bff;--ok:#56d364;--okbg:#16301f;--bad:#ff7b72;--badbg:#3a1d1d;--log:#0a0d11;--logfg:#c9d6e5}
+:root{
+  --rail:#201e1b;--rail-fg:#efece5;--rail-mute:#b3aca1;--rail-dim:#8a8378;--rail-brand:#de886b;--rail-hover:#302e2b;--rail-active:#3b2d26;--rail-line:rgb(255 255 255/.09);
+  --paper:#f7f5f1;--card:#fffdfa;--fg:#24211d;--mute:#6b645a;--line:#e4ded4;--brand:#9a4d33;--wash:#efe7e1;
+  --ok:#2f6b3a;--okbg:#e5f1e3;--bad:#b42318;--badbg:#fbe9e6;--log:#1b1916;--logfg:#e6e0d6}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#161412;--card:#1e1c19;--fg:#ece7df;--mute:#a59d91;--line:#34302b;--brand:#e19a7d;--wash:#2c2420;--ok:#7cc98a;--okbg:#1d2a1f;--bad:#ff8a7a;--badbg:#3a201c;--log:#0f0e0c}}
+:root[data-theme="dark"]{--paper:#161412;--card:#1e1c19;--fg:#ece7df;--mute:#a59d91;--line:#34302b;--brand:#e19a7d;--wash:#2c2420;--ok:#7cc98a;--okbg:#1d2a1f;--bad:#ff8a7a;--badbg:#3a201c;--log:#0f0e0c}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.55 "Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif}
-.wrap{max-width:1100px;margin:0 auto;padding:20px 16px 60px}
-header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+html,body{height:100%}
+body{margin:0;background:var(--paper);color:var(--fg);font:13.5px/1.6 Pretendard,"Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif;display:flex}
+/* rail */
+.rail{width:252px;flex:none;background:var(--rail);color:var(--rail-fg);display:flex;flex-direction:column;height:100vh;position:sticky;top:0}
+.brand{padding:18px 16px 14px;border-bottom:1px solid var(--rail-line)}
+.brand b{display:block;font-size:16px;letter-spacing:-.2px}
+.brand b span{color:var(--rail-brand)}
+.brand small{color:var(--rail-dim);font-size:11.5px}
+.nav{flex:1;overflow:auto;padding:10px 8px}
+.nav a{display:flex;gap:8px;align-items:flex-start;padding:7px 10px;border-radius:8px;color:var(--rail-fg);text-decoration:none;margin:1px 0}
+.nav a:hover{background:var(--rail-hover)}
+.nav a.on{background:var(--rail-active);box-shadow:inset 3px 0 0 var(--rail-brand)}
+.nav a.off{opacity:.45}
+.nav-no{font-weight:800;color:var(--rail-brand);min-width:20px;font-variant-numeric:tabular-nums}
+.nav-t{flex:1;min-width:0}
+.nav-t em{display:block;font-style:normal;font-size:11.5px;color:var(--rail-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nav-sec{color:var(--rail-dim);font-size:11px;letter-spacing:.5px;padding:12px 10px 4px}
+.chip{font-size:10.5px;border-radius:9px;padding:0 6px;background:rgb(255 255 255/.08);color:var(--rail-mute);white-space:nowrap}
+.chip.ok{background:#2f4a33;color:#bfe3c3}.chip.warn{background:#4a3a26;color:#f1cf9c}
+.rail-foot{border-top:1px solid var(--rail-line);padding:10px 14px;font-size:11.5px;color:var(--rail-dim)}
+.rail-foot .bar{background:rgb(255 255 255/.1)}
+/* main */
+main{flex:1;min-width:0;height:100vh;overflow:auto}
+.wrap{max-width:1180px;margin:0 auto;padding:22px 24px 60px}
 h1{font-size:20px;margin:0}
+.sub{color:var(--mute);margin:2px 0 14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin:12px 0}
+.card h2{font-size:14.5px;margin:0 0 10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.n{display:inline-grid;place-items:center;min-width:22px;height:22px;border-radius:6px;background:var(--brand);color:#fff;font-size:12px;font-weight:700;padding:0 4px}
 .mute{color:var(--mute)}
-select,button{font:inherit}
-select{padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--fg)}
-.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin:12px 0}
-.card h2{font-size:15px;margin:0 0 10px;display:flex;align-items:center;gap:8px}
-.step{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--acc);color:#fff;font-size:12px}
-button{border:1px solid var(--line);background:var(--head);color:var(--fg);border-radius:6px;padding:6px 12px;cursor:pointer}
-button.primary{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:700}
+button,select,input{font:inherit;color:var(--fg)}
+button{border:1px solid var(--line);background:var(--card);border-radius:8px;padding:6px 12px;cursor:pointer}
+button:hover{background:var(--wash)}
+button.primary{background:var(--brand);border-color:var(--brand);color:#fff;font-weight:700}
 button:disabled{opacity:.5;cursor:not-allowed}
-.slots{display:grid;gap:8px}
-.slot{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;border:1px dashed var(--line);border-radius:8px;padding:10px 12px}
-.slot.drag{border-color:var(--acc);background:var(--head)}
-.slot .name{font-weight:600}
-.slot .file{font-size:13px;word-break:break-all}
-.ok{color:var(--ok)} .bad{color:var(--bad)}
+input[type=text],input[type=number]{border:1px solid var(--line);border-radius:6px;padding:4px 6px;background:var(--card)}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-.bar{height:8px;background:var(--line);border-radius:4px;overflow:hidden;margin:10px 0 6px}
-.bar i{display:block;height:100%;width:0;background:var(--acc);transition:width .3s}
-pre#log{background:var(--log);color:var(--logfg);border-radius:8px;padding:10px 12px;height:240px;overflow:auto;font:12.5px/1.5 Consolas,"D2Coding",monospace;white-space:pre-wrap;margin:0}
-.kpis{display:flex;gap:10px;flex-wrap:wrap;margin:6px 0 12px}
-.kpi{border:1px solid var(--line);border-radius:8px;padding:8px 14px;min-width:120px}
-.kpi b{display:block;font-size:20px}
+.drop{border:1.5px dashed var(--line);border-radius:10px;padding:14px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;margin:6px 0}
+.drop.drag{border-color:var(--brand);background:var(--wash)}
+.drop .name{font-weight:600}
+.ok{color:var(--ok)}.bad{color:var(--bad)}
+.tabs{display:flex;gap:4px;margin-bottom:10px}
+.tabs button{border-radius:8px}
+.tabs button.on{background:var(--wash);border-color:var(--brand);color:var(--brand);font-weight:700}
+.bar{height:6px;background:var(--line);border-radius:3px;overflow:hidden;margin:8px 0 6px}
+.bar i{display:block;height:100%;width:0;background:var(--brand);transition:width .3s}
+pre.log{background:var(--log);color:var(--logfg);border-radius:10px;padding:10px 12px;max-height:220px;overflow:auto;font:12px/1.5 Consolas,"D2Coding",monospace;white-space:pre-wrap;margin:0}
 table{border-collapse:collapse;width:100%}
-td,th{border-bottom:1px solid var(--line);padding:6px 4px;text-align:left;font-size:13px;vertical-align:top}
-a{color:var(--acc)}
-.tag{font-size:11.5px;border-radius:10px;padding:1px 7px;background:var(--okbg);color:var(--ok);white-space:nowrap}
-#toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:8px 14px;border-radius:8px;display:none;max-width:90vw}
-.laws{font-size:12.5px;line-height:1.7}
-@media (max-width:600px){.slot{grid-template-columns:1fr}}
+th,td{border-bottom:1px solid var(--line);padding:6px 6px;text-align:left;vertical-align:middle;font-size:13px}
+th{color:var(--mute);font-weight:600}
+td input[type=text]{width:100%}
+td input[type=number]{width:72px}
+.kpis{display:flex;gap:10px;flex-wrap:wrap;margin:4px 0 10px}
+.kpi{border:1px solid var(--line);border-radius:10px;padding:6px 14px;min-width:110px;background:var(--paper)}
+.kpi b{display:block;font-size:19px}
+.stages{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px}
+.stage{border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--paper);cursor:pointer}
+.stage:hover{border-color:var(--brand)}
+.stage b{display:block;font-size:12.5px}
+.stage span{font-size:11.5px;color:var(--mute)}
+iframe{width:100%;height:78vh;border:1px solid var(--line);border-radius:10px;background:#fff}
+.tag{font-size:11px;border-radius:9px;padding:1px 7px;background:var(--okbg);color:var(--ok);white-space:nowrap}
+.laws{font-size:12px;color:var(--mute);line-height:1.5}
+#toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--fg);color:var(--paper);padding:9px 16px;border-radius:10px;display:none;max-width:90vw;z-index:9}
+.empty{padding:30px;text-align:center;color:var(--mute)}
+@media (max-width:820px){body{display:block}.rail{width:auto;height:auto;position:static}.nav{max-height:240px}main{height:auto}.stages{grid-template-columns:repeat(3,1fr)}.wrap{padding:16px}}
 </style></head>
-<body><div class="wrap">
-<header>
-  <h1>JEV 정오표 콘솔</h1>
-  <label class="mute">장 <select id="ch" onchange="changeCh()"></select></label>
-  <span class="mute" id="chinfo"></span>
-</header>
-<div class="mute">법령 개정 → 우리 교재 수정 판정 (Judge · Evidence · Verdict, Codex OAuth)</div>
-
-<div class="card">
-  <h2><span class="step">1</span>입력 파일 <span class="mute" style="font-weight:400">— 칸에 파일을 끌어다 놓거나 [선택]</span></h2>
-  <div class="slots" id="slots"></div>
-  <div class="row" style="margin-top:10px">
-    <button id="btnFetch" onclick="post('/api/fetch')">법제처에서 법령 받기 (구·신 자동)</button>
-    <span class="mute" style="font-size:12.5px">직접 저장한 PDF/HWPX가 있으면 그 파일이 우선 사용됩니다.</span>
-  </div>
-</div>
-
-<div class="card">
-  <h2><span class="step">2</span>판정 실행</h2>
-  <div class="row">
-    <button class="primary" id="btnRun" onclick="post('/api/run')">판정 시작</button>
-    <span id="jobinfo" class="mute"></span>
-  </div>
-  <div class="bar"><i id="prog"></i></div>
-  <pre id="log">대기 중</pre>
-</div>
-
-<div class="card">
-  <h2><span class="step">3</span>검토 · 반영</h2>
-  <div id="summary" class="mute">아직 판정 결과가 없습니다.</div>
-</div>
-
-<div class="card">
-  <h2><span class="step">4</span>반영 파일 <span class="mute" style="font-weight:400">— 게시판에는 <b>정오표_게시판_*.html</b> 을 올리세요</span></h2>
-  <div id="applied" class="mute">아직 반영한 내역이 없습니다.</div>
-</div>
-</div>
+<body>
+<nav class="rail">
+  <div class="brand"><b>JEV <span>개정 에이전트</span></b><small>Judge · Evidence · Verdict — 법령이 바뀌면 우리 책 어디를 고칠지</small></div>
+  <div class="nav" id="nav"></div>
+  <div class="rail-foot" id="foot"></div>
+</nav>
+<main><div class="wrap" id="view"></div></main>
 <div id="toast"></div>
 
 <script>
-let CH = new URLSearchParams(location.search).get("ch") || "ch09";
-let S = null, timer = null, wasRunning = false;
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const kb = n => n > 1048576 ? (n/1048576).toFixed(1)+"MB" : Math.max(1, Math.round(n/1024))+"KB";
-function toast(t){ const e=$("toast"); e.textContent=t; e.style.display="block"; clearTimeout(e._t); e._t=setTimeout(()=>e.style.display="none",3500) }
+const api = async (url, opt) => { const r = await fetch(url, opt); const j = await r.json().catch(()=>({error:"응답 오류"})); if(!r.ok || j.ok===false) throw new Error(j.error||r.status); return j };
+function toast(t, ms=3500){ const e=$("toast"); e.textContent=t; e.style.display="block"; clearTimeout(e._t); e._t=setTimeout(()=>e.style.display="none",ms) }
 
-async function load(){
+let APP = null, CHS = null, TOCDRAFT = null, timer = null, wasRunning = false, logSig = "";
+const route = () => { const m = location.hash.match(/^#\/ch\/(\w+)/); return m ? {view:"ch", id:m[1]} : {view:"book"} };
+
+async function refresh(){
   try{
-    const r = await fetch("/api/state?ch="+CH); S = await r.json();
-    if(S.error){ toast(S.error); return }
-    render();
-  }catch(e){ $("log").textContent = "서버에 연결할 수 없습니다. run.bat 창이 열려 있는지 확인하세요." }
-  clearTimeout(timer); timer = setTimeout(load, S && S.job.running ? 1000 : 5000);
+    APP = await api("/api/state");
+    const r = route();
+    if(r.view === "ch") CHS = await api("/api/ch?id="+r.id).catch(e=>{toast(e.message); location.hash="#/book"; return null});
+    renderNav(); renderView(false);
+  }catch(e){ $("view").innerHTML = `<div class="empty">서버에 연결할 수 없습니다. run.bat 창이 열려 있는지 확인하세요.</div>` }
+  clearTimeout(timer); timer = setTimeout(refresh, APP && APP.job.running ? 1200 : 6000);
 }
 
-function render(){
-  $("ch").innerHTML = S.chapters.map(c=>`<option value="${c.id}" ${c.id===CH?"selected":""}>${c.id} ${esc(c.title)}</option>`).join("");
-  const cur = S.chapters.find(c=>c.id===CH); $("chinfo").textContent = cur ? `교재 p.${cur.pages[0]}–${cur.pages[1]}` : "";
-
-  $("slots").innerHTML = S.slots.map(s=>`
-    <div class="slot" data-slot="${s.slot}">
-      <div><div class="name">${esc(s.label)}${s.hint && s.hint!=="현행" ? ` <span class="mute" style="font-weight:400">(${esc(s.hint)})</span>`:""}</div>
-      <div class="file">${s.file ? `<span class="ok">✔ ${esc(s.file)}</span> <span class="mute">${kb(s.size)}</span>` : `<span class="bad">✖ 없음</span> <span class="mute">${s.exts.join(" / ")}</span>`}</div></div>
-      <div><label><input type="file" accept="${s.exts.join(",")}" hidden onchange="upload('${s.slot}', this.files[0])"><button type="button" onclick="this.previousElementSibling.click()">선택</button></label></div>
-    </div>`).join("");
-  document.querySelectorAll(".slot").forEach(el=>{
-    el.ondragover = e=>{e.preventDefault(); el.classList.add("drag")};
-    el.ondragleave = ()=>el.classList.remove("drag");
-    el.ondrop = e=>{e.preventDefault(); el.classList.remove("drag"); if(e.dataTransfer.files[0]) upload(el.dataset.slot, e.dataTransfer.files[0])};
-  });
-
-  const j = S.job, mine = j.ch === CH;
-  $("btnRun").disabled = $("btnFetch").disabled = j.running;
-  $("jobinfo").innerHTML = j.name ? `${esc(j.name)} (${esc(j.ch)}) · ${j.running ? "실행 중… "+j.started : (j.error ? `<span class="bad">중단 ${j.ended}</span>` : `<span class="ok">완료 ${j.ended}</span>`)}` : "";
-  if(j.log.length){
-    const lg = $("log"), atBottom = lg.scrollTop + lg.clientHeight >= lg.scrollHeight - 20;
-    lg.textContent = j.log.join("\n"); if(atBottom) lg.scrollTop = lg.scrollHeight;
+function renderNav(){
+  const r = route(), t = APP.toc;
+  let h = `<a href="#/book" class="${r.view==="book"?"on":""}"><span class="nav-no">0</span><span class="nav-t">책 넣기 · 차례<em>${APP.book ? esc(APP.book.file) : "교재 PDF 전체를 올리세요"}</em></span></a>`;
+  h += `<div class="nav-sec">장별 개정 검토</div>`;
+  if(!APP.chapters.length) h += `<div class="nav-sec" style="letter-spacing:0">차례를 확정하면 장이 나타납니다.</div>`;
+  for(const c of APP.chapters){
+    const src = c.sources[1] ? `<span class="chip ${c.sources[0]===c.sources[1]?"ok":"warn"}">자료 ${c.sources[0]}/${c.sources[1]}</span>` : "";
+    const rv = c.revise!=null ? `<span class="chip warn">수정 ${c.revise}</span>` : "";
+    const ap = c.applied ? `<span class="chip ok">반영 ✓</span>` : "";
+    h += `<a href="#/ch/${c.id}" class="${r.view==="ch"&&r.id===c.id?"on":""}"><span class="nav-no">${c.id}</span>
+      <span class="nav-t">${esc(c.title)}<em>${c.mode==="book"?"개정기본서 대조":"법령 비교"} · p.${c.pages[0]}–${c.pages[1]}</em>
+      <span class="row" style="gap:4px;margin-top:3px">${src}${rv}${ap}</span></span></a>`;
   }
-  // 진행률: "[judge] 변경 조문 N건" 대비 [판정]/[cache]/[오류] 줄 수
-  let pct = 0;
-  if(j.name === "판정 실행"){
-    const tot = j.log.map(l=>l.match(/변경 조문 (\d+)건을 Codex/)).find(Boolean);
-    const done = j.log.filter(l=>/^\s*\[(판정|cache|오류)\]/.test(l)).length;
-    pct = !j.running && !j.error ? 100 : tot ? Math.min(98, 10 + 85*done/(+tot[1]||1)) : (j.running ? 5 : 0);
-  } else if(j.name){ pct = j.running ? 50 : 100 }
-  $("prog").style.width = pct + "%";
-  if(wasRunning && !j.running) toast(j.error ? "작업 중단: "+j.error : j.name+" 완료");
+  $("nav").innerHTML = h;
+  const j = APP.job;
+  $("foot").innerHTML = (j.name ? `<div>${j.running ? "⏳" : (j.error ? "⚠" : "✓")} ${esc(j.name)}${j.ch ? " · "+j.ch+"장" : ""}</div><div class="bar"><i style="width:${progress(j)}%"></i></div>` : "")
+    + `<div title="${esc(APP.workspace)}">워크스페이스: ${esc(APP.workspace.split(/[\\/]/).slice(-2).join("/"))}</div>`;
+  if(wasRunning && !j.running) toast(j.error ? "중단: "+j.error : j.name+" 완료", 5000);
   wasRunning = j.running;
+}
 
-  const s = S.summary;
-  $("summary").innerHTML = s ? `
-    <div class="laws">${s.laws.map(l=>`${esc(l.name)}: ${esc(l.old_header)} → <b>${esc(l.new_header)}</b>`).join("<br>")}</div>
-    <div class="kpis">
-      <div class="kpi"><span class="mute">변경 조문</span><b>${s.changes}</b></div>
-      <div class="kpi"><span class="mute">책 영향 후보</span><b>${s.rows}</b></div>
-      <div class="kpi"><span class="mute">수정 권고</span><b>${s.revise}</b></div>
-      <div class="kpi"><span class="mute">그대로 둠</span><b>${s.rows - s.revise}</b></div>
-      ${s.failed ? `<div class="kpi"><span class="mute">판정 실패</span><b class="bad">${s.failed}</b></div>` : ""}
+function progress(j){
+  if(!j.name) return 0;
+  if(!j.running) return 100;
+  if(j.name === "개정사항 판정"){
+    const tot = j.log.map(l=>l.match(/대조 단위 (\d+)건을 Codex/)).find(Boolean);
+    const done = j.log.filter(l=>/^\s*\[(판정|cache|오류)\]/.test(l)).length;
+    return tot ? Math.min(97, 8 + 88*done/(+tot[1]||1)) : 5;
+  }
+  return 45;
+}
+
+function renderView(force=true){
+  const r = route();
+  if(r.view === "book") return renderBook(force);
+  if(CHS) return renderChapter(force);
+}
+
+/* ---------- 0. 책 넣기 · 차례 ---------- */
+function renderBook(force){
+  const t = APP.toc, j = APP.job;
+  if(!force && document.activeElement && document.activeElement.closest("#toctable")) { updateJobBox("bookjob"); return }
+  if(t && (!TOCDRAFT || TOCDRAFT.book !== t.book || TOCDRAFT._src !== JSON.stringify(t.chapters))) {
+    TOCDRAFT = JSON.parse(JSON.stringify(t)); TOCDRAFT._src = JSON.stringify(t.chapters);
+  }
+  const bl = t && t.baseline;
+  $("view").innerHTML = `
+  <h1>책 넣기 · 차례</h1>
+  <div class="sub">교재 PDF 전체를 넣으면 차례(장별 쪽 범위)와 [법령적용기준]의 법령·책 기준 버전을 자동으로 뽑습니다. 확인 후 확정하면 장별 워크스페이스가 만들어집니다.</div>
+  <div class="card">
+    <h2><span class="n">1</span>교재 PDF 전체</h2>
+    <div class="drop" id="bookdrop">
+      <div><div class="name">${APP.book ? `<span class="ok">✔ ${esc(APP.book.file)}</span> <span class="mute">${kb(APP.book.size)}${t?` · ${t.page_count}쪽`:""}</span>` : `<span class="bad">✖ 아직 없음</span>`}</div>
+      <div class="mute">이 화면 아무 곳에나 끌어다 놓거나 [선택] — 쪼개지 말고 원본 그대로 (PDF)</div></div>
+      <div><input type="file" id="bookfile" accept=".pdf" hidden><button onclick="$('bookfile').click()">선택</button></div>
     </div>
-    <div class="row"><a href="/review/${CH}" target="_blank"><button class="primary">검토 화면 열기 → 체크 후 [반영]</button></a>
-    <span class="mute">판정 ${esc(s.updated)}</span></div>` : "아직 판정 결과가 없습니다. 1단계 파일을 채우고 [판정 시작]을 누르세요.";
-
-  $("applied").innerHTML = S.applied.length ? `<table><thead><tr><th>파일</th><th>시각</th><th></th></tr></thead><tbody>${
-    S.applied.map(f=>`<tr><td>${esc(f.name)} ${f.name.startsWith("정오표_게시판")?'<span class="tag">게시판용</span>':""}</td><td class="mute">${f.time}</td>
-    <td style="white-space:nowrap"><a href="/files/${encodeURI(f.path)}" target="_blank">보기</a> · <a href="/files/${encodeURI(f.path)}?dl=1">내려받기</a></td></tr>`).join("")}</tbody></table>`
-    : "아직 반영한 내역이 없습니다.";
+  </div>
+  ${t ? `
+  <div class="card">
+    <h2><span class="n">2</span>차례 확인 <span class="mute" style="font-weight:400">— 추출 방식: ${({outline:"PDF 책갈피",contents:"CONTENTS 쪽 + CHAPTER 표지",codex:"Codex",none:"찾지 못함"})[t.method]||t.method}${t.confirmed?` · <span class="ok">확정됨 ${esc(t.confirmed_at||"")}</span>`:""}</span></h2>
+    ${TOCDRAFT.chapters.length ? `<table id="toctable"><thead><tr><th>포함</th><th>번호</th><th>제목</th><th>시작 쪽</th><th>끝 쪽</th><th>연결 법령 (책 기준 버전)</th></tr></thead><tbody>
+      ${TOCDRAFT.chapters.map((c,i)=>`<tr>
+        <td><input type="checkbox" ${c.include?"checked":""} onchange="TOCDRAFT.chapters[${i}].include=this.checked"></td>
+        <td>${esc(c.id)}${c.kind==="appendix"?' <span class="tag">부록</span>':""}</td>
+        <td><input type="text" value="${esc(c.title)}" oninput="TOCDRAFT.chapters[${i}].title=this.value"></td>
+        <td><input type="number" value="${c.pages[0]}" oninput="TOCDRAFT.chapters[${i}].pages[0]=+this.value"></td>
+        <td><input type="number" value="${c.pages[1]}" oninput="TOCDRAFT.chapters[${i}].pages[1]=+this.value"></td>
+        <td class="laws">${c.laws && c.laws.length ? c.laws.map(l=>`${esc(l.name)} <span class="mute">${esc(l.old_header)}</span>`).join("<br>") : '<span class="mute">— (개정기본서 대조로 진행)</span>'}</td></tr>`).join("")}
+      </tbody></table>` : `<div class="empty">차례를 찾지 못했습니다. [Codex로 다시 뽑기]를 눌러 보세요.</div>`}
+    <div class="row" style="margin-top:12px">
+      <button class="primary" onclick="confirmToc()" ${!TOCDRAFT.chapters.length?"disabled":""}>차례 확정 → 장별 워크스페이스 만들기</button>
+      <button onclick="codexToc()" ${j.running?"disabled":""}>Codex로 다시 뽑기</button>
+      <span class="mute">PDF 쪽 번호 기준입니다. 끝 쪽에는 기본문제·정답해설까지 포함하세요.</span>
+    </div>
+    <div id="bookjob"></div>
+  </div>
+  ${bl && bl.page ? `<div class="card"><h2><span class="n">ℹ</span>법령적용기준 <span class="mute" style="font-weight:400">책 p.${bl.page} · ${bl.laws.length}줄</span></h2>
+    <div class="laws">${bl.laws.map(l=>esc(l.line)).join("<br>")}</div></div>` : ""}
+  ` : ""}`;
+  const dz = $("bookdrop");
+  dz.ondragover = e=>{e.preventDefault(); dz.classList.add("drag")}; dz.ondragleave = ()=>dz.classList.remove("drag");
+  dz.ondrop = e=>{e.preventDefault(); e.stopPropagation(); dz.classList.remove("drag"); uploadBook(e.dataTransfer.files[0])};
+  $("bookfile").onchange = e=>uploadBook(e.target.files[0]);
+  updateJobBox("bookjob");
 }
 
-async function upload(slot, file){
-  if(!file) return;
-  toast(`${file.name} 올리는 중…`);
-  const r = await fetch(`/api/upload?ch=${CH}&slot=${slot}`, {method:"POST", headers:{"X-Filename":encodeURIComponent(file.name)}, body:file});
-  const j = await r.json(); toast(j.ok ? `저장됨: _context/${j.saved}` : "실패: "+j.error); load();
+function updateJobBox(id){
+  const el = $(id), j = APP.job; if(!el) return;
+  const mine = id==="bookjob" ? j.ch===null : j.ch===route().id;
+  if(!j.name || !mine){ el.innerHTML = ""; return }
+  const sig = j.log.length+"|"+j.running;
+  if(el.dataset.sig === sig) return; el.dataset.sig = sig;
+  el.innerHTML = `<div class="bar"><i style="width:${progress(j)}%"></i></div><pre class="log">${esc(j.log.join("\n")||"시작 중…")}</pre>`;
+  const lg = el.querySelector(".log"); lg.scrollTop = lg.scrollHeight;
 }
-async function post(url){
-  const r = await fetch(url+"?ch="+CH, {method:"POST"}); const j = await r.json();
-  if(!j.ok) toast(j.error); load();
+
+async function uploadBook(f){
+  if(!f) return; toast(`${f.name} 올리는 중… 차례를 뽑습니다`, 8000);
+  try{ const j = await api("/api/book/upload",{method:"POST",headers:{"X-Filename":encodeURIComponent(f.name)},body:f});
+    TOCDRAFT = null; toast(`차례 ${j.toc.chapters.length}개를 찾았습니다. 확인 후 확정하세요.`); refresh(); renderBookSoon();
+  }catch(e){ toast("실패: "+e.message) }
 }
-function changeCh(){ CH = $("ch").value; history.replaceState(null,"","?ch="+CH); load() }
-load();
+function renderBookSoon(){ setTimeout(()=>renderView(true), 300) }
+async function confirmToc(){
+  const chapters = TOCDRAFT.chapters.map(({_src,...c})=>c);
+  try{ const j = await api("/api/book/toc",{method:"POST",body:JSON.stringify({chapters})});
+    toast(`장별 워크스페이스 ${j.made.length}개를 만들었습니다.`); TOCDRAFT=null; await refresh(); renderView(true);
+  }catch(e){ toast("실패: "+e.message) }
+}
+async function codexToc(){ try{ await api("/api/book/toc-codex",{method:"POST"}); toast("Codex가 차례를 읽는 중입니다 (1~2분)"); refresh() }catch(e){ toast(e.message) } }
+
+/* ---------- 장 화면 ---------- */
+let chRendered = null;
+function renderChapter(force){
+  const s = CHS, c = s.chapter, j = APP.job, sm = s.summary;
+  const key = c.id+"|"+c.mode+"|"+JSON.stringify(s.slots.map(x=>x.file))+"|"+(sm&&sm.updated)+"|"+s.stages.map(x=>x.files.length).join(",")+"|"+JSON.stringify(c.ref_pages);
+  if(!force && chRendered === key){ updateJobBox("chjob"); $("btnRun") && ($("btnRun").disabled = j.running); return }
+  chRendered = key;
+  const mode = c.mode || "law";
+  $("view").innerHTML = `
+  <div class="row" style="justify-content:space-between">
+    <div><h1>CHAPTER ${esc(c.id)} ${esc(c.title)}</h1>
+    <div class="sub" style="margin:0">교재 p.${c.pages[0]}–${c.pages[1]} · ${esc(s.dir)}</div></div>
+    <button onclick="openDir('')">폴더 열기</button>
+  </div>
+  <div class="stages" style="margin-top:12px">${s.stages.map(x=>`<div class="stage" onclick="openDir('${x.stage}')" title="탐색기로 열기"><b>${esc(x.stage)}</b><span>${x.files.length}개 파일</span></div>`).join("")}</div>
+
+  <div class="card" id="srccard">
+    <h2><span class="n">1</span>비교 자료 <span class="mute" style="font-weight:400">→ 01_비교자료 — 파일 여러 개를 이 카드에 한꺼번에 끌어다 놓으면 칸을 자동으로 찾아 넣습니다</span></h2>
+    <div class="tabs">
+      <button class="${mode==="law"?"on":""}" onclick="setMode('law')">법령 구·신 비교</button>
+      <button class="${mode==="book"?"on":""}" onclick="setMode('book')">신규 개정기본서 대조</button>
+    </div>
+    ${mode==="law" && !(c.laws||[]).length ? `<div class="mute">이 장에는 [법령적용기준]과 연결된 법령이 없습니다. 개정기본서 대조를 쓰거나, 차례 화면에서 제목을 법령명과 맞춰 주세요.</div>` : ""}
+    ${s.slots.map(x=>`<div class="drop" data-slot="${x.slot}">
+      <div><div class="name">${esc(x.label)}${x.hint && x.hint!=="현행" ? ` <span class="mute" style="font-weight:400">${esc(x.hint)}</span>`:""}</div>
+      <div>${x.file ? `<span class="ok">✔ ${esc(x.file)}</span> <span class="mute">${kb(x.size)}</span>` : `<span class="bad">✖ 없음</span> <span class="mute">${x.exts.join(" / ")}</span>`}</div></div>
+      <div><input type="file" accept="${x.exts.join(",")}" hidden onchange="upload('${x.slot}', this.files[0])"><button onclick="this.previousElementSibling.click()">선택</button></div></div>`).join("")}
+    ${mode==="law" ? `<div class="row" style="margin-top:6px"><button onclick="act('/api/ch/fetch')" ${j.running?"disabled":""}>법제처에서 구·신 법령 받기</button>
+      <span class="mute">법제처 화면에서 직접 저장한 PDF/HWPX를 올리면 그 파일이 우선입니다. HWP는 HWPX나 PDF로 저장하세요.</span></div>`
+    : `<div class="row" style="margin-top:6px">이 장에 해당하는 개정기본서 쪽
+      <input type="number" id="rp0" value="${c.ref_pages?c.ref_pages[0]:""}" placeholder="시작"> –
+      <input type="number" id="rp1" value="${c.ref_pages?c.ref_pages[1]:""}" placeholder="끝">
+      <button onclick="saveRef()">저장</button><span class="mute">올리면 같은 제목의 장을 자동으로 찾습니다. 80쪽 이하.</span></div>`}
+  </div>
+
+  <div class="card">
+    <h2><span class="n">2</span>개정사항 판정 <span class="mute" style="font-weight:400">→ 00_원고 · 02_변경목록 · 03_판정 (Codex OAuth)</span></h2>
+    <div class="row"><button class="primary" id="btnRun" onclick="act('/api/ch/run')" ${j.running?"disabled":""}>판정 시작</button>
+    <span class="mute">${mode==="law" ? "바뀐 조문마다 약 40초" : "4쪽 구간마다 약 1분"} · 이미 판정한 단위는 다시 하지 않습니다.</span></div>
+    <div id="chjob"></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="n">3</span>검토 내역 <span class="mute" style="font-weight:400">→ 04_검토 — 체크·수정문구 편집 후 [반영]</span></h2>
+    ${sm ? `<div class="laws">${sm.laws.map(l=>`${esc(l.name)}: ${esc(l.old_header)} → <b>${esc(l.new_header)}</b>`).join("<br>")}</div>
+      <div class="kpis" style="margin-top:8px">
+        <div class="kpi"><span class="mute">${sm.mode==="book"?"대조 구간":"바뀐 조문"}</span><b>${sm.changes}</b></div>
+        <div class="kpi"><span class="mute">책 영향 후보</span><b>${sm.rows}</b></div>
+        <div class="kpi"><span class="mute">수정 권고</span><b>${sm.revise}</b></div>
+        <div class="kpi"><span class="mute">그대로 둠</span><b>${sm.rows-sm.revise}</b></div>
+        ${sm.failed?`<div class="kpi"><span class="mute">판정 실패</span><b class="bad">${sm.failed}</b></div>`:""}
+        <div class="kpi"><span class="mute">판정 시각</span><b style="font-size:14px">${esc(sm.updated)}</b></div>
+      </div>
+      <div class="row" style="margin-bottom:8px"><a href="/review/${c.id}" target="_blank"><button>새 창으로 열기</button></a></div>
+      <iframe src="/review/${c.id}?t=${encodeURIComponent(sm.updated)}" title="검토 내역"></iframe>`
+    : `<div class="empty">아직 판정 결과가 없습니다. 1 비교 자료를 채우고 [판정 시작]을 누르세요.</div>`}
+  </div>
+
+  <div class="card">
+    <h2><span class="n">4</span>반영 파일 <span class="mute" style="font-weight:400">→ 05_반영 — 게시판에는 <b>정오표_게시판_*.html</b></span></h2>
+    ${(()=>{ const f = s.stages.find(x=>x.stage==="05_반영").files;
+      return f.length ? `<table><thead><tr><th>파일</th><th>시각</th><th></th></tr></thead><tbody>${f.map(x=>`<tr>
+        <td>${esc(x.name)} ${x.name.startsWith("정오표_게시판")?'<span class="tag">게시판용</span>':""}</td><td class="mute">${x.time}</td>
+        <td style="white-space:nowrap"><a href="/files/${c.id}/${encodeURI(x.path)}" target="_blank">보기</a> · <a href="/files/${c.id}/${encodeURI(x.path)}?dl=1">내려받기</a></td></tr>`).join("")}</tbody></table>`
+      : `<div class="mute">아직 반영한 내역이 없습니다.</div>` })()}
+  </div>`;
+  document.querySelectorAll(".drop[data-slot]").forEach(el=>{
+    el.ondragover = e=>{e.preventDefault(); el.classList.add("drag")}; el.ondragleave = ()=>el.classList.remove("drag");
+    el.ondrop = e=>{e.preventDefault(); e.stopPropagation(); el.classList.remove("drag");
+      const fs=[...e.dataTransfer.files]; if(fs.length>1) return dropMany(fs); upload(el.dataset.slot, fs[0])};
+  });
+  const card = $("srccard");
+  card.ondragover = e=>{e.preventDefault(); card.style.outline="2px dashed var(--brand)"};
+  card.ondragleave = e=>{ if(!card.contains(e.relatedTarget)) card.style.outline="" };
+  card.ondrop = e=>{e.preventDefault(); e.stopPropagation(); card.style.outline=""; dropMany([...e.dataTransfer.files])};
+  updateJobBox("chjob");
+}
+
+const cid = () => route().id;
+/* 파일 이름으로 칸 찾기: 법제처 저장 파일명엔 법령번호가 들어 있다 (예: 소상공인기본법(법률)(제17623호)(20201208).pdf) */
+function autoSlot(name){
+  const slots = CHS.slots, n = name.replace(/\s/g,"");
+  if(slots.length===1) return slots[0].slot;
+  if(/시행규칙|부령/.test(n)) return null;
+  const cand = slots.filter(x=> /시행령|대통령령/.test(n) ? x.abbr==="영" : x.abbr==="법");
+  if(!cand.length) return null;
+  const nums = n.match(/\d{4,6}/g) || [];
+  const old = cand.find(x=>x.which==="old" && x.number && nums.includes(x.number));
+  if(old) return old.slot;
+  if(/구법|구판|개정전|책기준|old/i.test(n)) return (cand.find(x=>x.which==="old")||{}).slot;
+  return (cand.find(x=>x.which==="new")||{}).slot;
+}
+async function dropMany(files){
+  if(!files.length) return;
+  const plan = files.map(f=>({f, slot:autoSlot(f.name)}));
+  const miss = plan.filter(p=>!p.slot);
+  for(const p of plan.filter(p=>p.slot)) await upload(p.slot, p.f, true);
+  await refresh(); renderView(true);
+  toast(`${plan.length-miss.length}개를 칸에 넣었습니다` + (miss.length ? ` · 칸을 못 찾은 파일: ${miss.map(p=>p.f.name).join(", ")} (해당 칸에 직접 놓아 주세요)` : ""), 7000);
+}
+async function upload(slot, f, quiet){
+  if(!f) return; toast(`${f.name} 올리는 중…`);
+  try{ const j = await api(`/api/ch/upload?id=${cid()}&slot=${encodeURIComponent(slot)}`,{method:"POST",headers:{"X-Filename":encodeURIComponent(f.name)},body:f});
+    if(!quiet){ toast(`저장: 01_비교자료/${j.saved}${j.note?" — "+j.note:""}`, 6000); await refresh(); renderView(true) }
+    else if(j.note) toast(j.note, 6000);
+  }catch(e){ toast(`실패 (${f.name}): `+e.message, 6000) }
+}
+async function setMode(m){ try{ await api(`/api/ch/config?id=${cid()}`,{method:"POST",body:JSON.stringify({mode:m})}); await refresh(); renderView(true) }catch(e){ toast(e.message) } }
+async function saveRef(){ try{ await api(`/api/ch/config?id=${cid()}`,{method:"POST",body:JSON.stringify({ref_pages:[+$("rp0").value,+$("rp1").value]})}); toast("쪽 범위를 저장했습니다."); refresh() }catch(e){ toast(e.message) } }
+async function act(url){ try{ await api(`${url}?id=${cid()}`,{method:"POST"}); refresh() }catch(e){ toast(e.message) } }
+async function openDir(stage){ try{ await api(`/api/ch/open?id=${cid()}&stage=${encodeURIComponent(stage)}`,{method:"POST"}) }catch(e){ toast(e.message) } }
+
+window.addEventListener("dragover", e=>e.preventDefault());
+window.addEventListener("drop", e=>{ e.preventDefault();
+  const f = e.dataTransfer && e.dataTransfer.files[0];
+  if(f && route().view==="book" && /\.pdf$/i.test(f.name)) uploadBook(f);
+  else if(f) toast("파일은 점선 칸이나 '비교 자료' 카드 위에 놓아 주세요.");
+});
+window.addEventListener("message", e=>{ if(e.data && e.data.jev==="applied"){ toast("반영 완료 — 4 반영 파일에 추가되었습니다."); refresh() } });
+window.addEventListener("hashchange", ()=>{ chRendered=null; CHS=null; refresh().then(()=>renderView(true)) });
+refresh().then(()=>renderView(true));
 </script></body></html>

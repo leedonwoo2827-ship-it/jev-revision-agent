@@ -1,9 +1,7 @@
-"""(선택) 법제처 국가법령정보센터에서 법령 본문을 받아 _context/*.txt 로 저장한다.
+"""(선택) 법제처 국가법령정보센터에서 법령 본문을 받아 <장>/01_비교자료/*.txt 로 저장한다.
 손으로 저장한 PDF/HWPX가 있으면 그쪽이 우선(config.resolve 순서: pdf > hwpx > txt).
 
-python -m jev.fetch_law "소상공인기본법" new 법
-python -m jev.fetch_law "소상공인기본법" old 법 17623,20201208     # (법률번호,공포일자)
-python -m jev.fetch_law "소상공인기본법시행령" old 령 32274,20211228
+python -m jev.fetch_law 09      # 09장에 연결된 법령의 구판(책 기준)·현행을 받는다
 """
 import html
 import re
@@ -46,13 +44,26 @@ def fetch(name, version=None):
     return t
 
 
+def fetch_chapter(cid):
+    """장에 연결된 법령(법률·시행령)의 구판(책 기준)·현행을 01_비교자료에 받는다."""
+    c = config.chapter(cid)
+    if not c.get("laws"):
+        raise SystemExit("이 장에 연결된 법령이 없습니다. 차례 화면에서 법령을 확인하세요.")
+    d = config.stage(cid, "01_비교자료")
+    for law in c["laws"]:
+        name = law.get("fetch_name") or law["name"].replace(" ", "")
+        for which, ver in (("new", None), ("old", law.get("old_version"))):
+            if which == "old" and not ver:
+                print(f"[받기] {law['name']}: 책 기준 버전 정보가 없어 구판은 건너뜀")
+                continue
+            print(f"[받기] {law['name']} {ver or '(현행)'} ...")
+            text = fetch(name, ver)
+            slot = f"law_{which}_{law['abbr']}"
+            (d / f"{slot}.txt").write_text(text, encoding="utf-8")
+            others = [p.name for p in d.glob(f"{slot}.*") if p.suffix.lower() in (".pdf", ".hwpx")]
+            note = f"  (※ {', '.join(others)} 이(가) 있어 그 파일이 우선 사용됩니다)" if others else ""
+            print(f"[받기] → 01_비교자료/{slot}.txt ({len(text):,}자){note}")
+
+
 if __name__ == "__main__":
-    if len(sys.argv) < 4:
-        raise SystemExit(__doc__)
-    name, which, abbr = sys.argv[1:4]
-    version = sys.argv[4] if len(sys.argv) > 4 else None
-    text = fetch(name, version)
-    out = config.ROOT / "_context" / f"law_{which}_{abbr}.txt"
-    out.parent.mkdir(exist_ok=True)
-    out.write_text(text, encoding="utf-8")
-    print(f"[fetch] {name} {version or '(현행)'} → {out} ({len(text):,}자)")
+    fetch_chapter(sys.argv[1] if len(sys.argv) > 1 else "09")

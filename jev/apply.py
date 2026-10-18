@@ -1,9 +1,9 @@
 """[반영] 처리: 체크된 정오표 항목을 장 원고에 적용하고 기록을 남긴다.
 
-산출 (output/applied/):
-  반영내역_<ch>_<ts>.md / .csv     — 반영·미반영 전체 기록
-  <ch>_revised_<ts>.md / .html     — 반영된 원고 (html은 변경부 하이라이트)
-  정오표_게시판_<ch>_<ts>.html      — 회사 게시판 업로드용 정오표 (반영 건만)
+산출 (<장>/05_반영/):
+  반영내역_ch<NN>_<ts>.md / .csv     — 반영·미반영 전체 기록
+  ch<NN>_revised_<ts>.md / .html     — 반영된 원고 (html은 변경부 하이라이트)
+  정오표_게시판_ch<NN>_<ts>.html      — 회사 게시판 업로드용 정오표 (반영 건만)
 
 CLI(서버 없이 HTML에서 내려받은 decisions JSON 처리):
   python -m jev.apply <decisions.json>
@@ -36,10 +36,10 @@ def locate(pages, row):
 
 
 def run(decisions, ch=None):
-    ch = ch or decisions.get("chapter", "ch09")
-    wd = config.workdir(ch)
-    res = json.loads((wd / "results.json").read_text(encoding="utf-8"))
-    book = json.loads((wd / "book.json").read_text(encoding="utf-8"))
+    cid = ch or decisions.get("chapter", "09")
+    ch = f"ch{cid}"
+    res = json.loads((config.stage(cid, "03_판정") / "results.json").read_text(encoding="utf-8"))
+    book = json.loads((config.stage(cid, "00_원고") / "book.json").read_text(encoding="utf-8"))
     pages = [dict(p) for p in book["pages"]]
     edits = {p["page"]: [] for p in pages}
     outside = []
@@ -72,8 +72,7 @@ def run(decisions, ch=None):
                         rec["page"] = p["page"]
         records.append(rec)
 
-    out = config.OUTPUT / "applied"
-    out.mkdir(parents=True, exist_ok=True)
+    out = config.stage(cid, "05_반영")
 
     # 반영된 원고 (md: 깨끗한 본문 / html: 변경부 표시)
     md, hb = [f"# {res['title']} ({ch}) — 반영본 {ts}\n"], []
@@ -125,13 +124,13 @@ def run(decisions, ch=None):
         for r in sorted(applied, key=lambda r: r["page"]) if r["status"] != "변경없음")
     laws = "<br>".join(f"{html.escape(l['name'])}: {html.escape(l['old_header'])} → <b>{html.escape(l['new_header'])}</b>"
                        for l in res["laws"])
-    board = (f"<h1>정오표 — CHAPTER {ch[2:]} {html.escape(res['title'])}</h1>"
+    board = (f"<h1>정오표 — CHAPTER {cid} {html.escape(res['title'])}</h1>"
              f"<p class=meta>{laws}<br>반영일 {datetime.now():%Y-%m-%d} · 반영자 {html.escape(reviewer)}</p>"
              f"<table><thead><tr><th>쪽</th><th>관련 조문</th><th>기존</th><th>수정</th><th>사유</th></tr></thead>"
              f"<tbody>{trs}</tbody></table>")
     (out / f"정오표_게시판_{ch}_{ts}.html").write_text(page_html(f"정오표 {res['title']}", board), encoding="utf-8")
 
-    files = sorted(str(p.relative_to(config.ROOT)) for p in out.glob(f"*{ch}*{ts}*"))
+    files = sorted(str(p.relative_to(config.WS)) for p in out.glob(f"*{ch}*{ts}*"))
     print(f"[apply] 반영 {len(applied)}건 → {out}")
     return {"files": files, "counts": {"total": len(records), "checked": len(applied),
                                        "applied": sum(r["status"] == "반영" for r in records)},
