@@ -22,5 +22,5 @@ if not exist _context mkdir _context
 if not exist work mkdir work
 if not exist output mkdir output
 echo.
-echo 설치 완료. _context 에 교재 PDF와 법령 파일을 넣고 run.bat 을 실행하세요.
+echo 설치 완료. run.bat 을 실행하면 웹 콘솔이 열립니다 (파일 올리기·판정·반영은 콘솔에서).
 pause
