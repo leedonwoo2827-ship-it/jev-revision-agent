@@ -39,6 +39,12 @@ def parse(path: Path) -> dict:
     header = m.group(0) if m else ""
     lines = [l.strip() for l in raw.splitlines()]
     lines = [l for l in lines if l and not NOISE.match(l)]
+    # 법제처 PDF는 쪽마다 법령명을 머리글로 찍는다 → '[시행 …]' 바로 위 줄(법령명)과 같은 줄은 버린다
+    hi = next((i for i, l in enumerate(lines) if HEADER.search(l)), None)
+    if hi:
+        title = re.sub(r"\s+", "", lines[hi - 1])
+        if title and not ART.match(lines[hi - 1]):
+            lines = lines[:hi] + [l for l in lines[hi:] if re.sub(r"\s+", "", l) != title]
 
     articles, cur, addenda = {}, None, []
     in_addenda = False

@@ -5,7 +5,7 @@ python -m jev.pipeline 09 [--workers 3] [--model gpt-5] [--limit N]
 """
 import argparse
 
-from . import config, diff_law, extract_book, judge_codex, report, toc
+from . import config, diff_law, extract_book, fetch_law, judge_codex, report, toc
 
 
 def make_toc():
@@ -21,11 +21,27 @@ def make_toc():
     print(f"[차례] {len(t['chapters'])}개 장 ({t['method']}) → {config.WS}")
 
 
+def fill_missing_laws(cid):
+    """법령 비교 방식에서 비어 있는 칸을 법제처에서 자동으로 받는다."""
+    c = config.chapter(cid)
+    if c.get("mode") == "book" or not c.get("laws"):
+        return
+    empty = [s for s in config.slots(c) if not config.source(cid, s["slot"])]
+    if not empty:
+        return
+    print(f"[받기] 비어 있는 칸 {len(empty)}개를 법제처에서 자동으로 받습니다: " + ", ".join(s["label"] for s in empty))
+    try:
+        fetch_law.fetch_chapter(cid, only_missing=True)
+    except (Exception, SystemExit) as e:
+        print(f"[받기] 자동 받기 실패: {e} — 해당 칸에 법제처 PDF를 직접 넣어 주세요.")
+
+
 def run(cid, workers=3, model=None, limit=None):
     extract_book.run(cid)
+    fill_missing_laws(cid)
     _, changes, missing = diff_law.run(cid)
     if missing:
-        raise SystemExit("비교자료가 모자랍니다. 위 목록을 채운 뒤 다시 실행하세요.")
+        raise SystemExit("비교자료가 모자랍니다. 위 칸에 법제처 PDF를 넣거나 [법제처에서 구·신 법령 받기]를 누른 뒤 다시 실행하세요.")
     if not changes:
         print("[실행] 구/신 사이에 차이가 없습니다. 비교자료 버전을 확인하세요.")
     judge_codex.run(cid, workers=workers, model=model, limit=limit)

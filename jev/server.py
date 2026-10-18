@@ -56,9 +56,14 @@ class Job:
         real, job = sys.stdout, self
 
         class Tee:
+            """print 가 여러 조각으로 써도 한 줄로 모아 로그에 넣는다."""
+            buf = ""
+
             def write(self, s):
                 real.write(s)
-                job.log.extend(l for l in s.splitlines() if l.strip())
+                self.buf += s
+                *lines, self.buf = self.buf.split("\n")
+                job.log.extend(l for l in lines if l.strip())
                 return len(s)
 
             def flush(self):

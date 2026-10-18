@@ -44,8 +44,9 @@ def fetch(name, version=None):
     return t
 
 
-def fetch_chapter(cid):
-    """장에 연결된 법령(법률·시행령)의 구판(책 기준)·현행을 01_비교자료에 받는다."""
+def fetch_chapter(cid, only_missing=False):
+    """장에 연결된 법령(법률·시행령)의 구판(책 기준)·현행을 01_비교자료에 받는다.
+    only_missing=True 이면 비어 있는 칸만 받는다 (판정 시작 때 자동 보충용)."""
     c = config.chapter(cid)
     if not c.get("laws"):
         raise SystemExit("이 장에 연결된 법령이 없습니다. 차례 화면에서 법령을 확인하세요.")
@@ -53,6 +54,8 @@ def fetch_chapter(cid):
     for law in c["laws"]:
         name = law.get("fetch_name") or law["name"].replace(" ", "")
         for which, ver in (("new", None), ("old", law.get("old_version"))):
+            if only_missing and config.source(cid, f"law_{which}_{law['abbr']}"):
+                continue
             if which == "old" and not ver:
                 print(f"[받기] {law['name']}: 책 기준 버전 정보가 없어 구판은 건너뜀")
                 continue
