@@ -16,9 +16,11 @@ body{margin:0;background:var(--paper);color:var(--fg);font:13.5px/1.6 Pretendard
 /* rail */
 .rail{width:252px;flex:none;background:var(--rail);color:var(--rail-fg);display:flex;flex-direction:column;height:100vh;position:sticky;top:0}
 .brand{padding:18px 16px 14px;border-bottom:1px solid var(--rail-line)}
-.brand b{display:block;font-size:16px;letter-spacing:-.2px}
-.brand b span{color:var(--rail-brand)}
-.brand small{color:var(--rail-dim);font-size:11.5px}
+.brand b{font-size:16px;letter-spacing:-.2px}
+.pill{background:#b9542f;color:#fff;font-weight:800;font-size:13px;border-radius:8px;padding:5px 10px}
+.brand small{display:block;color:var(--rail-dim);font-size:11.5px;margin-top:6px}
+.newbook{display:block;width:100%;margin-top:12px;background:var(--rail-brand);border:0;color:#2a1a12;font-weight:800;font-size:15px;border-radius:22px;padding:10px 0}
+.newbook:hover{background:#e89a7f}
 .nav{flex:1;overflow:auto;padding:10px 8px}
 .nav a{display:flex;gap:8px;align-items:flex-start;padding:7px 10px;border-radius:8px;color:var(--rail-fg);text-decoration:none;margin:1px 0}
 .nav a:hover{background:var(--rail-hover)}
@@ -80,7 +82,9 @@ iframe{width:100%;height:78vh;border:1px solid var(--line);border-radius:10px;ba
 </style></head>
 <body>
 <nav class="rail">
-  <div class="brand"><b>JEV <span>개정 에이전트</span></b><small>Judge · Evidence · Verdict — 법령이 바뀌면 우리 책 어디를 고칠지</small></div>
+  <div class="brand"><div class="row" style="gap:8px"><span class="pill">JEV 개정</span><b>에이전트</b></div>
+    <small>Judge · Evidence · Verdict — 법령이 바뀌면 우리 책 어디를 고칠지</small>
+    <button class="newbook" onclick="newBook()">＋ 새 책 넣기</button></div>
   <div class="nav" id="nav"></div>
   <div class="rail-foot" id="foot"></div>
 </nav>
@@ -183,6 +187,9 @@ function renderBook(force){
     </div>
     <div id="bookjob"></div>
   </div>
+  ${APP.backups.length ? `<div class="card"><h2><span class="n">↺</span>이전 책 (백업) <span class="mute" style="font-weight:400">— backup/ 폴더 · 불러오면 지금 작업은 먼저 백업됩니다</span></h2>
+    <table><tbody>${APP.backups.map(b=>`<tr><td>${esc(b.book||"(책 없음)")}</td><td class="mute">${esc(b.name.slice(0,15))} · 장 ${b.chapters}개</td>
+    <td style="text-align:right"><button onclick="restoreBook('${esc(b.name)}')">불러오기</button></td></tr>`).join("")}</tbody></table></div>` : ""}
   ${bl && bl.page ? `<div class="card"><h2><span class="n">ℹ</span>법령적용기준 <span class="mute" style="font-weight:400">책 p.${bl.page} · ${bl.laws.length}줄</span></h2>
     <div class="laws">${bl.laws.map(l=>esc(l.line)).join("<br>")}</div></div>` : ""}
   ` : ""}`;
@@ -215,6 +222,19 @@ async function confirmToc(){
   try{ const j = await api("/api/book/toc",{method:"POST",body:JSON.stringify({chapters})});
     toast(`장별 워크스페이스 ${j.made.length}개를 만들었습니다.`); TOCDRAFT=null; await refresh(); renderView(true);
   }catch(e){ toast("실패: "+e.message) }
+}
+async function newBook(){
+  if(APP.book || APP.chapters.length){
+    if(!confirm("지금 책 작업을 backup 폴더로 옮기고 새 책으로 시작할까요?\n(지우지 않습니다. '이전 책'에서 다시 불러올 수 있습니다)")) return;
+  }
+  try{ const j = await api("/api/new-book",{method:"POST"});
+    TOCDRAFT=null; location.hash="#/book"; await refresh(); renderView(true);
+    toast(j.backup ? `백업: backup/${j.backup} — 새 교재 PDF를 끌어다 놓으세요` : "새 교재 PDF를 끌어다 놓으세요", 6000);
+  }catch(e){ toast(e.message) }
+}
+async function restoreBook(name){
+  if(!confirm(`'${name}' 을(를) 불러올까요?\n지금 작업은 먼저 backup 폴더로 옮겨집니다.`)) return;
+  try{ await api("/api/restore",{method:"POST",body:JSON.stringify({name})}); TOCDRAFT=null; await refresh(); renderView(true); toast("불러왔습니다.") }catch(e){ toast(e.message) }
 }
 async function codexToc(){ try{ await api("/api/book/toc-codex",{method:"POST"}); toast("Codex가 차례를 읽는 중입니다 (1~2분)"); refresh() }catch(e){ toast(e.message) } }
 

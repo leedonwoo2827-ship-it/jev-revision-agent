@@ -18,6 +18,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 WS = Path(os.environ.get("JEV_WORKSPACE", ROOT / "workspace"))
+BACKUP = WS.parent / "backup"
 BOOK_DIR = WS / "00_책"
 STAGES = ["00_원고", "01_비교자료", "02_변경목록", "03_판정", "04_검토", "05_반영"]
 SRC_EXTS = {".pdf", ".hwpx", ".txt"}
@@ -114,3 +115,49 @@ def slots(c):
                         "number": (law.get("old_version") or ",").split(",")[0],
                         "hint": law.get("old_header", "") if which == "old" else "현행"})
     return out
+
+
+# ---------- 새 책 / 백업 ----------
+def _ws_empty():
+    return not WS.exists() or not any(WS.iterdir())
+
+
+def backup_current(reason="새 책"):
+    """현재 워크스페이스를 backup/<시각>_<책이름>/ 으로 옮긴다 (지우지 않음)."""
+    import shutil
+    from datetime import datetime
+    if _ws_empty():
+        return None
+    pdf = book_pdf()
+    name = slug(pdf.stem) if pdf else "책없음"
+    dest = BACKUP / f"{datetime.now():%Y%m%d-%H%M%S}_{name}"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(WS), str(dest))
+    WS.mkdir(parents=True, exist_ok=True)
+    return dest
+
+
+def backups():
+    if not BACKUP.exists():
+        return []
+    out = []
+    for d in sorted(BACKUP.iterdir(), reverse=True):
+        if not d.is_dir():
+            continue
+        t = _read(d / "00_책" / "toc.json") or {}
+        out.append({"name": d.name, "book": t.get("book"),
+                    "chapters": sum(1 for x in d.iterdir() if (x / "chapter.json").exists())})
+    return out
+
+
+def restore(name):
+    """백업을 워크스페이스로 되돌린다. 지금 작업은 먼저 백업한다."""
+    import shutil
+    src = BACKUP / name
+    if not src.is_dir() or src.parent != BACKUP:
+        raise ValueError(f"백업이 없습니다: {name}")
+    saved = backup_current()
+    if WS.exists():
+        WS.rmdir()  # backup_current 뒤의 빈 폴더
+    shutil.move(str(src), str(WS))
+    return saved

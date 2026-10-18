@@ -2,6 +2,8 @@
 
   GET  /                         콘솔 화면 (jev/console.html)
   GET  /api/state                책 · 차례 · 장 목록 · 작업 상태
+  POST /api/new-book             새 책 넣기: 지금 워크스페이스를 backup/ 으로 옮기고 비운다
+  POST /api/restore              백업 불러오기 (지금 작업은 먼저 백업)
   POST /api/book/upload          교재 PDF 전체 올리기 → 차례 자동 추출
   POST /api/book/toc             차례 확정 (JSON) → 장 워크스페이스 생성
   POST /api/book/toc-codex       Codex로 차례 다시 뽑기 (백그라운드)
@@ -126,6 +128,7 @@ def app_state():
             "book": {"file": pdf.name, "size": pdf.stat().st_size} if pdf else None,
             "toc": config.toc(),
             "chapters": [chapter_brief(c) for c in config.chapters()],
+            "backups": config.backups(),
             "job": JOB.state()}
 
 
@@ -283,6 +286,16 @@ class H(BaseHTTPRequestHandler):
                 if JOB.running:
                     return self._send(409, busy)
                 return self._send(200, {"ok": True, "toc": book_upload(fname, body)})
+            if path == "/api/new-book":
+                if JOB.running:
+                    return self._send(409, busy)
+                d = config.backup_current()
+                return self._send(200, {"ok": True, "backup": d.name if d else None})
+            if path == "/api/restore":
+                if JOB.running:
+                    return self._send(409, busy)
+                d = config.restore(json.loads(body)["name"])
+                return self._send(200, {"ok": True, "backup": d.name if d else None})
             if path == "/api/book/toc":
                 return self._send(200, {"ok": True, "made": toc_confirm(json.loads(body))})
             if path == "/api/book/toc-codex":
