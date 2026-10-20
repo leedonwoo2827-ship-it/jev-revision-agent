@@ -104,6 +104,27 @@ def codex_bin():
     return exe
 
 
+class CodexAuthError(RuntimeError):
+    """이 PC의 Codex(ChatGPT) 로그인이 만료·해제됨 — 다시 로그인해야 한다."""
+    kind = "auth"
+
+
+AUTH_RE = re.compile(r"Failed to refresh token|log out and sign in|unauthorized \(401\)|\(401\)|HTTP 401|not logged in"
+                     r"|Please (?:re-?)?login|codex login", re.I)
+AUTH_MSG = ("이 PC의 Codex 로그인이 만료됐습니다. 콘솔 왼쪽 아래 Codex 메뉴의 [로그인]"
+            "(또는 codex-다시로그인.bat)으로 다시 로그인한 뒤 다시 누르세요.")
+
+
+def _tidy(err, keep=6):
+    """codex stderr: 시각·중복 줄을 걷어 내고 마지막 몇 줄만."""
+    out = []
+    for l in err.splitlines():
+        l = re.sub(r"^\d{4}-\d\d-\d\dT[\d:.]+Z\s*", "", l).strip()
+        if l and re.search(r"[A-Za-z가-힣]", l) and l not in out:
+            out.append(l)
+    return " / ".join(out[-keep:])[-600:]
+
+
 def ask_codex(prompt, model=None, timeout=900, schema=None):
     with tempfile.TemporaryDirectory() as td:
         td = Path(td)
@@ -116,7 +137,10 @@ def ask_codex(prompt, model=None, timeout=900, schema=None):
         r = subprocess.run(cmd, input=prompt.encode("utf-8"), capture_output=True, timeout=timeout)
         out = td / "out.json"
         if not out.exists():
-            raise RuntimeError(f"codex 실패 (exit {r.returncode}): {r.stderr.decode('utf-8', 'replace')[-800:]}")
+            err = r.stderr.decode("utf-8", "replace")
+            if AUTH_RE.search(err):
+                raise CodexAuthError(AUTH_MSG + f"  (원문: {_tidy(err, 2)})")
+            raise RuntimeError(f"codex 실패 (exit {r.returncode}): {_tidy(err)}")
         return json.loads(out.read_text(encoding="utf-8"))
 
 
@@ -197,7 +221,7 @@ def run(cid, workers=3, model=None, limit=None):
             return BOOK_PROMPT.format(s=s, e=e, ch_title=c["title"], part=part,
                                       ref=ch_data["laws"][0]["ref_text"])
         hint = [p["page"] for p in book["pages"]
-                if f"{chg['abbr']} {chg['article']}" in p["law_refs"]] or "없음"
+                if f"{re.sub(r'[0-9]', '', chg['abbr'])} {chg['article']}" in p["law_refs"]] or "없음"
         return PROMPT.format(hint=hint, law=chg["law"], article=chg["article"], title=chg["title"],
                              kind=chg["kind"], old=chg["old"] or "(없음)", new=chg["new"] or "(없음)",
                              diff=chg["diff"], ch_title=c["title"], book=book_text)
@@ -213,6 +237,8 @@ def run(cid, workers=3, model=None, limit=None):
             print(f"  [codex] {chg['id']} ({chg['kind']}) ...", flush=True)
             try:
                 res = ask_codex(prompt, model=model)
+            except CodexAuthError:  # 로그인 문제는 모든 단위가 똑같이 실패하므로 바로 멈춘다
+                raise
             except Exception as e:  # 한 단위 실패가 전체를 막지 않게
                 print(f"  [오류] {chg['id']}: {e}")
                 return chg, {"summary_of_change": f"판정 실패: {e}", "items": []}, True

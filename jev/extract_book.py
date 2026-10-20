@@ -9,7 +9,8 @@ import fitz
 
 from . import config
 
-LAW_REF = re.compile(r"(법|영|시행령)\s*제(\d+)조(?:의(\d+))?")
+LAW_REF = re.compile(r"(법|영|시행령|규칙|시행규칙)\s*제(\d+)조(?:의(\d+))?")
+REF_ABBR = {"법": "법", "영": "영", "시행령": "영", "규칙": "칙", "시행규칙": "칙"}
 
 
 def page_texts(pdf, first, last):
@@ -33,7 +34,7 @@ def run(cid):
 
     pages = []
     for p, text in texts:
-        refs = sorted({f"{'법' if m.group(1) == '법' else '영'} 제{m.group(2)}조" + (f"의{m.group(3)}" if m.group(3) else "")
+        refs = sorted({f"{REF_ABBR[m.group(1)]} 제{m.group(2)}조" + (f"의{m.group(3)}" if m.group(3) else "")
                        for m in LAW_REF.finditer(text)})
         pages.append({"page": p, "text": text, "law_refs": refs})
     (out / "book.json").write_text(json.dumps({"chapter": cid, "title": c["title"], "pages": pages},
@@ -43,11 +44,14 @@ def run(cid):
             f.write(f"\n[p.{pg['page']}]\n{pg['text']}")
 
     # [법령적용기준] 중 이 장 법령 줄 (규칙 기반 수정용)
+    # 법령 원문 머리글에서 얻은 기준이면, 그 머리글이 이 장 쪽 범위 안에 있을 때만 (관련법령 장)
     toc = config.toc() or {}
     bl = toc.get("baseline", {})
     names = {law["name"] for law in c.get("laws", [])}
-    base = [{"page": bl["page"], "law": l["name"], "line": l["line"]}
-            for l in bl.get("laws", []) if l["name"] in names]
+    header_src = bl.get("source") == "법령 원문 머리글"
+    base = [{"page": l.get("page") or bl["page"], "law": l["name"], "line": l["line"]}
+            for l in bl.get("laws", []) if l["name"] in names and l.get("line")
+            and (not header_src or (l.get("page") and first <= l["page"] <= last))]
     (out / "baseline.json").write_text(json.dumps(base, ensure_ascii=False, indent=1), encoding="utf-8")
 
     print(f"[원고] {cid} {c['title']} p.{first}-{last} ({len(pages)}쪽) 추출 → {out}")

@@ -7,7 +7,12 @@
   POST /api/book/upload          교재 PDF 전체 올리기 → 차례 자동 추출
   POST /api/book/toc             차례 확정 (JSON) → 장 워크스페이스 생성
   POST /api/book/toc-codex       Codex로 차례 다시 뽑기 (백그라운드)
+  POST /api/book/laws            이 책의 법령 목록 저장 (+ reattach: 장마다 기본 연결 다시)
+  POST /api/book/laws-fetch      이 책의 법령(현행·책 기준판)을 법제처에서 한꺼번에 받기 (백그라운드)
   GET  /api/ch?id=09             장 상세 (비교자료 칸 · 판정 요약 · 폴더별 파일)
+  POST /api/codex/refresh        Codex 로그인 상태 + 실제 짧은 호출로 확인 (백그라운드)
+  POST /api/codex/login          새 명령창에서 codex login (relogin=true 면 먼저 로그아웃)
+  POST /api/codex/logout         codex logout
   POST /api/ch/upload?id=&slot=  비교자료 올리기 (본문 = 파일, X-Filename 헤더)
   POST /api/ch/config?id=        비교 방식(law/book) · 개정기본서 쪽 범위 저장
   POST /api/ch/fetch?id=         법제처에서 구·신 법령 받기 (백그라운드)
@@ -29,7 +34,7 @@ from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import apply, config, fetch_law, report, toc
+from . import apply, codex_auth, config, fetch_law, report, toc
 from .pipeline import run as run_pipeline
 
 CONSOLE = Path(__file__).with_name("console.html")
@@ -40,14 +45,14 @@ class Job:
 
     def __init__(self):
         self.lock = threading.Lock()
-        self.name, self.ch, self.running, self.error = None, None, False, None
+        self.name, self.ch, self.running, self.error, self.error_kind = None, None, False, None, None
         self.log, self.started, self.ended = [], None, None
 
     def start(self, name, ch, fn):
         with self.lock:
             if self.running:
                 return False
-            self.name, self.ch, self.running, self.error = name, ch, True, None
+            self.name, self.ch, self.running, self.error, self.error_kind = name, ch, True, None, None
             self.log, self.started, self.ended = [], datetime.now(), None
         threading.Thread(target=self._run, args=(fn,), daemon=True).start()
         return True
@@ -77,7 +82,9 @@ class Job:
             self.error = str(e)
             print(f"[중단] {e}")
         except Exception as e:
-            self.error = str(e)
+            self.error, self.error_kind = str(e), getattr(e, "kind", None)
+            if self.error_kind == "auth":
+                codex_auth.mark_expired()
             print(f"[오류] {e}")
             real.write(traceback.format_exc())
         finally:
@@ -86,6 +93,7 @@ class Job:
 
     def state(self):
         return {"name": self.name, "ch": self.ch, "running": self.running, "error": self.error,
+                "error_kind": self.error_kind,
                 "log": self.log[-300:],
                 "started": self.started.strftime("%H:%M:%S") if self.started else None,
                 "ended": self.ended.strftime("%H:%M:%S") if self.ended else None}
@@ -134,7 +142,8 @@ def app_state():
             "toc": config.toc(),
             "chapters": [chapter_brief(c) for c in config.chapters()],
             "backups": config.backups(),
-            "job": JOB.state()}
+            "job": JOB.state(),
+            "codex": codex_auth.state()}
 
 
 def chapter_state(cid):
@@ -168,6 +177,10 @@ def toc_confirm(body):
     t = config.toc()
     if not t:
         raise ValueError("먼저 교재 PDF를 올려 주세요.")
+    bl = t.get("baseline") or {}
+    for c in body["chapters"]:  # 화면에서 고른 법령 이름 → 약칭(법/영/칙 …)·책 기준 버전이 붙은 목록
+        if "law_names" in c:
+            c["laws"] = toc.laws_for(c.pop("law_names"), bl)
     t["chapters"] = body["chapters"]
     t["confirmed"] = True
     t["confirmed_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -178,11 +191,54 @@ def toc_confirm(body):
         if not c.get("include"):
             continue
         prev = existing.get(c["id"], {})
-        c = {**c, "pages": [int(c["pages"][0]), int(c["pages"][1])],
-             "mode": prev.get("mode", "law" if c.get("laws") else "book"),
+        # 연결 법령이 그대로면 사람이 고른 비교 방식을 유지, 바뀌었으면 법령 유무로 다시 정한다
+        same = prev and prev.get("laws") == c.get("laws")
+        c = {**c, "id": f"{int(c['no']):02d}" if c.get("no") else c["id"],
+             "pages": [int(c["pages"][0]), int(c["pages"][1])],
+             "mode": prev["mode"] if same and prev.get("mode") else ("law" if c.get("laws") else "book"),
              "ref_pages": prev.get("ref_pages")}
         made.append(config.save_chapter(c).name)
     return made
+
+
+def _norm_version(v):
+    """'20645, 2025. 1. 7.' · '20645,20250107' → '20645,20250107' (법제처 주소 형식). 못 읽으면 ''.
+    책 머리글에서 읽은 '@시행일'(예: '@20250131')은 그대로 둔다."""
+    import re
+    ef = re.search(r"@(\d{8})\s*$", v or "")
+    base = re.sub(r"@\d{8}\s*$", "", v or "")
+    m = re.match(r"\D*(\d+)\D+(\d{4})\D*?(\d{1,2})\D+(\d{1,2})\D*$", base) or \
+        re.match(r"\D*(\d+)\D+(\d{4})(\d{2})(\d{2})\s*$", base)
+    if not m:
+        return ""
+    return f"{m.group(1)},{m.group(2)}{int(m.group(3)):02d}{int(m.group(4)):02d}" + (f"@{ef.group(1)}" if ef else "")
+
+
+def book_laws(body):
+    """이 책의 법령 목록 저장. 법령 이름만 넣어도 되고(구판 버전은 비워 둠), with_family 면 시행령·시행규칙도 함께."""
+    t = config.toc()
+    if not t:
+        raise ValueError("먼저 교재 PDF를 올려 주세요.")
+    bl = t.setdefault("baseline", {"page": None, "laws": [], "source": None})
+    old = {l["name"]: l for l in bl.get("laws", [])}
+    laws = []
+    for l in body.get("laws", []):
+        name = " ".join(l["name"].split())
+        if not name or any(x["name"] == name for x in laws):
+            continue
+        prev = old.get(name, {})
+        ver = _norm_version(l.get("version", prev.get("version", "")))
+        laws.append({**prev, "name": name, "version": ver, "checked": bool(l.get("checked", True)),
+                     "header": prev.get("header") or (f"[책 기준 {ver}]" if ver else ""),
+                     "line": prev.get("line", "")})
+    bl["laws"] = laws
+    bl["suggest"] = [x for x in bl.get("suggest", []) if x["name"] not in {l["name"] for l in laws}]
+    if not bl.get("source") and laws:
+        bl["source"] = "직접 입력"
+    if body.get("reattach"):
+        toc.attach_laws(t["chapters"], bl, Path(t["book"]).stem)
+    config.save_toc(t)
+    return t
 
 
 def ch_upload(cid, slot, filename, data):
@@ -310,6 +366,19 @@ class H(BaseHTTPRequestHandler):
                 ok = JOB.start("Codex로 차례 뽑기", None, lambda: (config.save_toc(toc.codex_extract(pdf)),
                                                                 print("[차례] Codex 결과를 불러왔습니다. 확인 후 확정하세요.")))
                 return self._send(200 if ok else 409, {"ok": True} if ok else busy)
+            if path == "/api/book/laws":
+                return self._send(200, {"ok": True, "toc": book_laws(json.loads(body))})
+            if path == "/api/book/laws-fetch":
+                ok = JOB.start("법제처에서 책 법령 받기", None, fetch_law.fetch_book)
+                return self._send(200 if ok else 409, {"ok": True} if ok else busy)
+            if path == "/api/codex/refresh":
+                codex_auth.check_async(deep=True)
+                return self._send(200, {"ok": True})
+            if path == "/api/codex/login":
+                codex_auth.login(relogin=bool((json.loads(body) if body else {}).get("relogin")))
+                return self._send(200, {"ok": True})
+            if path == "/api/codex/logout":
+                return self._send(200, {"ok": True, "out": codex_auth.logout()})
             if path == "/api/ch/upload":
                 saved, note = ch_upload(cid, q.get("slot", ""), fname, body)
                 return self._send(200, {"ok": True, "saved": saved, "note": note})
@@ -349,6 +418,7 @@ def serve(port=8765, open_browser=True):
             webbrowser.open(url)
         return
     config.WS.mkdir(parents=True, exist_ok=True)
+    codex_auth.check_async(deep=False)  # 켜질 때는 가볍게 (실제 호출 확인은 좌하단 [새로고침])
     print(f"[JEV 개정 에이전트] {url}")
     print(f"[JEV 개정 에이전트] 워크스페이스: {config.WS}")
     print("이 창을 닫으면 콘솔도 멈춥니다. (종료: Ctrl+C)")
