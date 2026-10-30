@@ -6,10 +6,13 @@
 :root{
   --rail:#201e1b;--rail-fg:#efece5;--rail-mute:#b3aca1;--rail-dim:#8a8378;--rail-brand:#de886b;--rail-hover:#302e2b;--rail-active:#3b2d26;--rail-line:rgb(255 255 255/.09);
   --paper:#f7f5f1;--card:#fffdfa;--fg:#24211d;--mute:#6b645a;--line:#e4ded4;--brand:#9a4d33;--wash:#efe7e1;
-  --ok:#2f6b3a;--okbg:#e5f1e3;--bad:#b42318;--badbg:#fbe9e6;--log:#1b1916;--logfg:#e6e0d6}
+  --ok:#2f6b3a;--okbg:#e5f1e3;--bad:#b42318;--badbg:#fbe9e6;--log:#1b1916;--logfg:#e6e0d6;
+  --del:#ffc4bb;--delfg:#9b1c10;--ins:#a8ebb6;--insfg:#11602a}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
-  --paper:#161412;--card:#1e1c19;--fg:#ece7df;--mute:#a59d91;--line:#34302b;--brand:#e19a7d;--wash:#2c2420;--ok:#7cc98a;--okbg:#1d2a1f;--bad:#ff8a7a;--badbg:#3a201c;--log:#0f0e0c}}
-:root[data-theme="dark"]{--paper:#161412;--card:#1e1c19;--fg:#ece7df;--mute:#a59d91;--line:#34302b;--brand:#e19a7d;--wash:#2c2420;--ok:#7cc98a;--okbg:#1d2a1f;--bad:#ff8a7a;--badbg:#3a201c;--log:#0f0e0c}
+  --paper:#161412;--card:#1e1c19;--fg:#ece7df;--mute:#a59d91;--line:#34302b;--brand:#e19a7d;--wash:#2c2420;--ok:#7cc98a;--okbg:#1d2a1f;--bad:#ff8a7a;--badbg:#3a201c;--log:#0f0e0c;
+  --del:#5a2620;--delfg:#ffb4a8;--ins:#1f4a2a;--insfg:#9be3ad}}
+:root[data-theme="dark"]{--paper:#161412;--card:#1e1c19;--fg:#ece7df;--mute:#a59d91;--line:#34302b;--brand:#e19a7d;--wash:#2c2420;--ok:#7cc98a;--okbg:#1d2a1f;--bad:#ff8a7a;--badbg:#3a201c;--log:#0f0e0c;
+  --del:#5a2620;--delfg:#ffb4a8;--ins:#1f4a2a;--insfg:#9be3ad}
 *{box-sizing:border-box}
 html,body{height:100%}
 body{margin:0;background:var(--paper);color:var(--fg);font:13.5px/1.6 Pretendard,"Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif;display:flex}
@@ -98,6 +101,35 @@ iframe{width:100%;height:78vh;border:1px solid var(--line);border-radius:10px;ba
 .steps{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 6px}
 .steps span{font-size:12px;color:var(--mute)}
 .empty{padding:30px;text-align:center;color:var(--mute)}
+/* ④ 정오 판정 · ⑤ 정오표 받기 */
+button.big{font-size:14.5px;padding:9px 18px}
+select{border:1px solid var(--line);border-radius:6px;padding:5px 8px;background:var(--card)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;border-radius:0;padding:4px 10px}
+.seg button.on{background:var(--brand);color:#fff}
+.dash a{color:var(--fg)}.dash a:hover{color:var(--brand)}
+.dash tr.cur td{background:var(--wash)}.dash tr.sub td{font-size:12.5px;border-bottom-style:dashed;padding-top:3px;padding-bottom:3px}.dash td{vertical-align:middle}
+.tag.plain{background:var(--paper);color:var(--mute);border:1px solid var(--line)}.tag.bad{background:var(--badbg);color:var(--bad)}
+.note{background:var(--wash);border-radius:10px;padding:10px 14px;margin:8px 0;font-size:13px}
+.grid2{display:grid;grid-template-columns:70px minmax(0,1fr);gap:6px 12px;align-items:start}
+.para{display:grid;grid-template-columns:40px minmax(0,1fr);gap:10px;padding:12px 4px;border-bottom:1px solid var(--line)}
+.para:last-child{border-bottom:0}
+.para .no{font-weight:800;color:var(--brand);font-variant-numeric:tabular-nums;text-align:right;font-size:12px}
+.para.off .body{opacity:.6}
+.para .txt{white-space:pre-wrap;overflow-wrap:anywhere}
+.para .meta{display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:12px}
+.para label.adopt{display:inline-flex;gap:5px;align-items:center;font-weight:700;cursor:pointer}
+.para details{margin-top:6px}
+.para details summary{cursor:pointer;color:var(--mute);font-size:12px}
+.para .quote{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12.5px;color:var(--mute)}
+b.mx{background:var(--del);color:var(--delfg);border-radius:2px;padding:0 1px}b.my{background:var(--ins);color:var(--insfg);border-radius:2px;padding:0 1px}
+.dl{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-top:10px}
+.dl a{display:block;border:1px solid var(--line);border-radius:10px;padding:12px 14px;text-decoration:none;color:inherit;background:var(--card)}
+.dl a:hover{border-color:var(--brand)}
+.dl a b{display:block;font-size:15px;margin-bottom:3px}
+.dl a span{font-size:12px;color:var(--mute)}
+.dl a.main{border:2px solid var(--brand)}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 @media (max-width:820px){body{display:block}.rail{width:auto;height:auto;position:static}.nav{max-height:240px}main{height:auto}.stages{grid-template-columns:repeat(3,1fr)}.wrap{padding:16px}}
 </style></head>
 <body>
@@ -118,33 +150,35 @@ const kb = n => n > 1048576 ? (n/1048576).toFixed(1)+"MB" : Math.max(1, Math.rou
 const api = async (url, opt) => { const r = await fetch(url, opt); const j = await r.json().catch(()=>({error:"응답 오류"})); if(!r.ok || j.ok===false) throw new Error(j.error||r.status); return j };
 function toast(t, ms=3500){ const e=$("toast"); e.textContent=t; e.style.display="block"; e.onclick=()=>e.style.display="none"; clearTimeout(e._t); e._t=setTimeout(()=>e.style.display="none",ms) }
 
-let APP = null, CHS = null, TOCDRAFT = null, timer = null, wasRunning = false, logSig = "";
-const route = () => { const m = location.hash.match(/^#\/ch\/(\w+)/); return m ? {view:"ch", id:m[1]} : {view:"book"} };
+let APP = null, CHS = null, ERR = null, DEC = {}, TOCDRAFT = null, timer = null, wasRunning = false, logSig = "";
+const route = () => { const h = location.hash;
+  let m = h.match(/^#\/ch\/(\w+)/); if(m) return {view:"ch", id:m[1]};
+  m = h.match(/^#\/(judge|result|errata|download)/); return m ? {view:m[1]} : {view:"book"} };
 
 async function refresh(){
   try{
     APP = await api("/api/state");
     const r = route();
     if(r.view === "ch") CHS = await api("/api/ch?id="+r.id).catch(e=>{toast(e.message); location.hash="#/book"; return null});
+    if((r.view === "errata" || r.view === "download") && !ERR){ ERR = await api("/api/errata"); DEC = JSON.parse(JSON.stringify(ERR.decisions)) }
     renderNav(); renderView(false);
   }catch(e){ $("view").innerHTML = `<div class="empty">서버에 연결할 수 없습니다. run.bat 창이 열려 있는지 확인하세요.</div>` }
   clearTimeout(timer); timer = setTimeout(refresh, APP && (APP.job.running || (APP.codex && (APP.codex.checking || APP.codex.login_open))) ? 1200 : 6000);
 }
 
+const STAGE_NAV = [["book","①","책 넣기 · 차례"],["judge","②","장별 판정"],["result","③","판정 결과"],["errata","④","정오 판정"],["download","⑤","정오표 받기"]];
+const judged = () => APP.chapters.filter(c=>c.result);
+const xlsxTime = () => (APP.errata.files.find(f=>f.name.endsWith("_정오표.xlsx"))||{}).time;
 function renderNav(){
-  const r = route(), t = APP.toc;
-  let h = `<a href="#/book" class="${r.view==="book"?"on":""}"><span class="nav-no">0</span><span class="nav-t">책 넣기 · 차례<em>${APP.book ? esc(APP.book.file) : "교재 PDF 전체를 올리세요"}</em></span></a>`;
-  h += `<div class="nav-sec">장별 개정 검토</div>`;
-  if(!APP.chapters.length) h += `<div class="nav-sec" style="letter-spacing:0">차례를 확정하면 장이 나타납니다.</div>`;
-  for(const c of APP.chapters){
-    const src = c.sources[1] ? `<span class="chip ${c.sources[0]===c.sources[1]?"ok":"warn"}">자료 ${c.sources[0]}/${c.sources[1]}</span>` : "";
-    const rv = c.revise!=null ? `<span class="chip warn">수정 ${c.revise}</span>` : "";
-    const ap = c.applied ? `<span class="chip ok">반영 ✓</span>` : "";
-    h += `<a href="#/ch/${c.id}" class="${r.view==="ch"&&r.id===c.id?"on":""}"><span class="nav-no">${c.id}</span>
-      <span class="nav-t">${esc(c.title)}<em>${c.mode==="book"?"개정기본서 대조":"법령 비교"} · p.${c.pages[0]}–${c.pages[1]}</em>
-      <span class="row" style="gap:4px;margin-top:3px">${src}${rv}${ap}</span></span></a>`;
-  }
-  $("nav").innerHTML = h;
+  const r = route(), chs = APP.chapters, jd = judged();
+  const sum = k => jd.reduce((a,c)=>a+c.result[k], 0);
+  const sub = {book: APP.book ? esc(APP.book.file) : "교재 PDF 전체를 올리세요",
+    judge: chs.length ? `${chs.length}장 중 ${jd.length}장 판정` : "차례를 확정하면 장이 나옵니다",
+    result: jd.length ? `후보 ${sum("rows")} · 수정 권고 ${sum("revise")}` : "아직 판정 전",
+    errata: "수정 후보마다 반영할지 체크",
+    download: xlsxTime() ? `${esc(xlsxTime())}에 만듦` : "책 전체 한 번에"};
+  // 레일은 ①~⑤ 단계만. 장은 ② 장별 판정 표와 장 화면의 이전/다음으로 오간다
+  $("nav").innerHTML = STAGE_NAV.map(([k,no,t])=>`<a href="#/${k}" class="${r.view===k||(k==="judge"&&r.view==="ch")?"on":""}"><span class="nav-no">${no}</span><span class="nav-t">${t}<em>${sub[k]}</em></span></a>`).join("");
   const j = APP.job;
   $("foot").innerHTML = codexFoot() + (j.name ? `<div>${j.running ? "⏳" : (j.error ? "⚠" : "✓")} ${esc(j.name)}${j.ch ? " · "+j.ch+"장" : ""}</div><div class="bar"><i style="width:${progress(j)}%"></i></div>` : "")
     + `<div title="${esc(APP.workspace)}">워크스페이스: ${esc(APP.workspace.split(/[\\/]/).slice(-2).join("/"))}</div>`;
@@ -160,13 +194,20 @@ function progress(j){
     const done = j.log.filter(l=>/^\s*\[(판정|cache|오류)\]/.test(l)).length;
     return tot ? Math.min(97, 8 + 88*done/(+tot[1]||1)) : 5;
   }
+  if(/^일괄/.test(j.name)){
+    const k = j.log.map(l=>l.match(/^\[일괄\] (\d+)\/(\d+)장/)).filter(Boolean).pop();
+    return k ? Math.min(97, 100*(k[1]-.5)/k[2]) : 3;
+  }
   return 45;
 }
 
 function renderView(force=true){
   const r = route();
   if(r.view === "book") return renderBook(force);
-  if(CHS) return renderChapter(force);
+  if(r.view === "ch") return CHS && renderChapter(force);
+  if(r.view === "judge") return renderJudge(force);
+  if(r.view === "result") return renderResultPage(force);
+  if(ERR) return r.view === "errata" ? renderErrata(force) : renderDownload(force);
 }
 
 /* ---------- 0. 책 넣기 · 차례 ---------- */
@@ -195,7 +236,7 @@ function renderBook(force){
   const bl = (t && t.baseline) || {};
   const onLaws = LAWDRAFT ? LAWDRAFT.laws.filter(l=>l.checked!==false) : [];
   $("view").innerHTML = `
-  <h1>책 넣기 · 차례</h1>
+  <h1>① 책 넣기 · 차례</h1>
   <div class="sub">① 교재 PDF 전체를 넣고 → ② 이 책에서 확인할 법령(법·시행령·시행규칙)을 정하고 → ③ 장마다 쪽 범위와 연결 법령을 확인한 뒤 확정하면 장별 워크스페이스가 만들어집니다.</div>
   <div id="bookjob"></div>
   <div class="card">
@@ -250,6 +291,7 @@ function renderBook(force){
       </tbody></table>` : `<div class="empty">차례를 찾지 못했습니다. <button onclick="addRow(-1)">＋ 직접 행 추가</button> 또는 [Codex로 다시 뽑기]</div>`}
     <div class="row" style="margin-top:12px">
       <button class="primary" onclick="confirmToc()" ${!TOCDRAFT.chapters.length?"disabled":""}>차례 확정 → 장별 워크스페이스 만들기</button>
+      ${t.confirmed && APP.chapters.length ? `<a href="#/judge"><button>다음: ② 장별 판정 →</button></a>` : ""}
       <button onclick="codexToc()" ${j.running?"disabled":""} title="이 PC에 Codex 로그인이 되어 있어야 합니다">Codex로 다시 뽑기</button>
       <span class="mute">PDF 쪽 번호 기준입니다. 끝 쪽에는 기본문제·정답해설까지 포함하세요.</span>
     </div>
@@ -361,7 +403,8 @@ function copyLogin(){ navigator.clipboard.writeText("codex logout && codex login
 
 function updateJobBox(id){
   const el = $(id), j = APP.job; if(!el) return;
-  const mine = id==="bookjob" ? j.ch===null : j.ch===route().id;
+  const all = /^일괄/.test(j.name||"");
+  const mine = id==="alljob" ? all : id==="bookjob" ? j.ch===null && !all : j.ch===route().id;
   if(!j.name || !mine){ el.innerHTML = ""; return }
   const sig = j.log.length+"|"+j.running+"|"+ALERT_OFF;
   if(el.dataset.sig === sig) return; el.dataset.sig = sig;
@@ -388,7 +431,8 @@ async function confirmToc(){
   if(new Set(ids).size !== ids.length) return toast("번호가 겹치는 장이 있습니다.", 6000);
   const chapters = TOCDRAFT.chapters.map(({_src,...c})=>({...c, id:String(c.no).padStart(2,"0")}));
   try{ const j = await api("/api/book/toc",{method:"POST",body:JSON.stringify({chapters})});
-    toast(`장별 워크스페이스 ${j.made.length}개를 만들었습니다.`); TOCDRAFT=null; await refresh(); renderView(true);
+    TOCDRAFT=null; location.hash = "#/judge";
+    toast(`장별 워크스페이스 ${j.made.length}개를 만들었습니다. 다음: 장마다 비교 자료를 채우고 판정하세요.`, 7000);
   }catch(e){ toast("실패: "+e.message, 8000) }
 }
 async function newBook(){
@@ -414,7 +458,14 @@ function renderChapter(force){
   if(!force && chRendered === key){ updateJobBox("chjob"); $("btnRun") && ($("btnRun").disabled = j.running); return }
   chRendered = key;
   const mode = c.mode || "law";
+  const chs = APP.chapters, k = chs.findIndex(x=>x.id===c.id), prev = chs[k-1], next = chs[k+1];
+  const go = (x, t) => x ? `<a href="#/ch/${x.id}" title="${esc(x.title)}"><button>${t}</button></a>` : "";
   $("view").innerHTML = `
+  <div class="row" style="justify-content:space-between;margin-bottom:8px">
+    <a href="#/judge"><button>← ② 장별 판정</button></a>
+    <div class="row">${go(prev, `← ${prev ? esc(prev.id) : ""}장`)}<span class="mute">${k+1} / ${chs.length}</span>
+      ${next ? go(next, `다음: ${esc(next.id)}장 ${esc(next.title.slice(0,12))} →`) : `<a href="#/result"><button>다음: ③ 판정 결과 →</button></a>`}</div>
+  </div>
   <div class="row" style="justify-content:space-between">
     <div><h1>CHAPTER ${esc(c.id)} ${esc(c.title)}</h1>
     <div class="sub" style="margin:0">교재 p.${c.pages[0]}–${c.pages[1]} · ${esc(s.dir)}</div></div>
@@ -449,7 +500,7 @@ function renderChapter(force){
   </div>
 
   <div class="card">
-    <h2><span class="n">3</span>검토 내역 <span class="mute" style="font-weight:400">→ 04_검토 — 체크·수정문구 편집 후 [반영]</span></h2>
+    <h2><span class="n">3</span>판정 결과 <span class="mute" style="font-weight:400">— 체크와 정오표는 책 전체로 ④ 정오 판정 · ⑤ 정오표 받기에서</span></h2>
     ${sm ? `<div class="laws">${sm.laws.map(l=>`${esc(l.name)}: ${esc(l.old_header)} → <b>${esc(l.new_header)}</b>`).join("<br>")}</div>
       <div class="kpis" style="margin-top:8px">
         <div class="kpi"><span class="mute">${sm.mode==="book"?"대조 구간":"바뀐 조문"}</span><b>${sm.changes}</b></div>
@@ -459,18 +510,9 @@ function renderChapter(force){
         ${sm.failed?`<div class="kpi"><span class="mute">판정 실패</span><b class="bad">${sm.failed}</b></div>`:""}
         <div class="kpi"><span class="mute">판정 시각</span><b style="font-size:14px">${esc(sm.updated)}</b></div>
       </div>
-      <div class="row" style="margin-bottom:8px"><a href="/review/${c.id}" target="_blank"><button>새 창으로 열기</button></a></div>
-      <iframe src="/review/${c.id}?t=${encodeURIComponent(sm.updated)}" title="검토 내역"></iframe>`
+      <div class="row"><button class="primary" onclick="goErrata('${c.id}')">④ 정오 판정에서 이 장 체크하기</button>
+        <a href="/review/${c.id}" target="_blank" class="mute" title="장 하나만 따로 보는 예전 검토 화면">장별 검토 HTML</a></div>`
     : `<div class="empty">아직 판정 결과가 없습니다. 1 비교 자료를 채우고 [판정 시작]을 누르세요.</div>`}
-  </div>
-
-  <div class="card">
-    <h2><span class="n">4</span>반영 파일 <span class="mute" style="font-weight:400">→ 05_반영 — 게시판에는 <b>정오표_게시판_*.html</b></span></h2>
-    ${(()=>{ const f = s.stages.find(x=>x.stage==="05_반영").files;
-      return f.length ? `<table><thead><tr><th>파일</th><th>시각</th><th></th></tr></thead><tbody>${f.map(x=>`<tr>
-        <td>${esc(x.name)} ${x.name.startsWith("정오표_게시판")?'<span class="tag">게시판용</span>':""}</td><td class="mute">${x.time}</td>
-        <td style="white-space:nowrap"><a href="/files/${c.id}/${encodeURI(x.path)}" target="_blank">보기</a> · <a href="/files/${c.id}/${encodeURI(x.path)}?dl=1">내려받기</a></td></tr>`).join("")}</tbody></table>`
-      : `<div class="mute">아직 반영한 내역이 없습니다.</div>` })()}
   </div>`;
   document.querySelectorAll(".drop[data-slot]").forEach(el=>{
     el.ondragover = e=>{e.preventDefault(); el.classList.add("drag")}; el.ondragleave = ()=>el.classList.remove("drag");
@@ -521,13 +563,272 @@ async function saveRef(){ try{ await api(`/api/ch/config?id=${cid()}`,{method:"P
 async function act(url){ try{ await api(`${url}?id=${cid()}`,{method:"POST"}); refresh() }catch(e){ toast(e.message) } }
 async function openDir(stage){ try{ await api(`/api/ch/open?id=${cid()}&stage=${encodeURIComponent(stage)}`,{method:"POST"}) }catch(e){ toast(e.message) } }
 
+/* ---------- ② 장별 판정 · ③ 판정 결과 (책 전체 표) ---------- */
+let viewKey = null;
+const pageHead = (t, sub, btn) => `<div class="row" style="justify-content:space-between;align-items:flex-start">
+  <div><h1>${t}${APP.book ? ` <span class="mute" style="font-weight:400;font-size:15px">· ${esc(APP.book.file.replace(/\.pdf$/i,""))}</span>` : ""}</h1><div class="sub">${sub}</div></div>${btn||""}</div>`;
+const noChapters = () => `<div class="card empty">아직 장이 없습니다. <a href="#/book">① 책 넣기 · 차례</a>에서 차례를 확정하세요.</div>`;
+
+/* ② 장별 판정 — 대시보드: 장(1뎁스)을 체크하고 단계 버튼. 장을 펼치면 법령마다 구·신 자료(2뎁스) */
+const loadSet = k => { try{ return new Set(JSON.parse(localStorage.getItem(k)||"[]")) }catch(e){ return new Set() } };
+const saveSet = (k, v) => { try{ localStorage.setItem(k, JSON.stringify([...v])) }catch(e){} };
+let PICK = loadSet("jev.pick"), FOLD = loadSet("jev.open"), REDO = false;
+const isBatch = j => /^일괄/.test(j.name||"");
+const batchCur = j => { if(!j.running || !isBatch(j)) return null;
+  const m = j.log.map(l=>l.match(/^\[일괄\] \d+\/\d+장 — (\w+)/)).filter(Boolean).pop(); return m && m[1] };
+const okTag = (t, title) => `<span class="tag" title="${esc(title||"")}">${t}</span>`;
+const noTag = (t, title) => `<span class="tag plain" title="${esc(title||"")}">${t}</span>`;
+function slotRows(c){  // 2뎁스: 법령마다 책 기준(구) · 현행(신)
+  if(c.mode === "book"){ const x = c.slots[0] || {};
+    return `<tr class="sub"><td></td><td></td><td></td><td colspan="2">개정기본서 PDF</td>
+      <td colspan="5">${x.file ? okTag("✔ "+esc(x.file)) : '<span class="bad">✖ 없음</span>'} <span class="mute">${c.ref_pages ? `쪽 ${c.ref_pages[0]}–${c.ref_pages[1]}` : "쪽 범위 미정"}</span></td></tr>` }
+  const laws = [...new Set(c.slots.map(x=>x.law))];
+  if(!laws.length) return `<tr class="sub"><td></td><td></td><td></td><td colspan="7" class="mute">연결된 법령이 없습니다. ① 차례에서 법령을 켜거나 장 화면에서 개정기본서 대조로 바꾸세요.</td></tr>`;
+  const cell = (law, w) => { const x = c.slots.find(s=>s.law===law && s.which===w);
+    return !x ? "" : x.file ? okTag("✔ "+esc(x.file), x.hint) : `<span class="bad" title="${esc(x.hint||"")}">✖ 없음</span>` };
+  return laws.map(l=>`<tr class="sub"><td></td><td></td><td></td><td colspan="2">${esc(l)}</td>
+    <td colspan="5"><span class="mute" style="font-size:11px">책 기준(구) </span>${cell(l,"old")} &nbsp; <span class="mute" style="font-size:11px">현행(신) </span>${cell(l,"new")}</td></tr>`).join("");
+}
+function renderJudge(force){
+  const chs = APP.chapters, j = APP.job, run = j.running, cur = batchCur(j);
+  for(const k of [...PICK]) if(!chs.some(c=>c.id===k)) PICK.delete(k);
+  const key = JSON.stringify([chs, run, cur, j.stopping, [...PICK], [...FOLD], REDO]);
+  if(!force && viewKey === key){ updateJobBox("alljob"); return }
+  viewKey = key;
+  const sel = chs.filter(c=>PICK.has(c.id)), dis = run ? "disabled" : "";
+  const full = c => c.sources[1] && c.sources[0] === c.sources[1];
+  const kpi = (t, v, sub) => `<div class="kpi"><span class="mute">${t}</span><b>${v}</b>${sub ? `<span class="mute" style="font-size:11.5px">${sub}</span>` : ""}</div>`;
+  const jd = judged(), sum = k => jd.reduce((a,c)=>a+c.result[k], 0);
+  const btn = (steps, label, cls="") => `<button class="${cls}" onclick='runSteps(${JSON.stringify(steps)})' ${run || !sel.length ? "disabled" : ""}>${label}</button>`;
+  const row = c => `<tr class="${cur===c.id?"cur":""}">
+    <td><input type="checkbox" ${PICK.has(c.id)?"checked":""} ${dis} onchange="pickCh('${c.id}',this.checked)"></td>
+    <td><button class="iconbtn" style="border:0;background:none" onclick="foldCh('${c.id}')" title="법령별 자료 보기">${FOLD.has(c.id)?"▾":"▸"}</button></td>
+    <td><b>${esc(c.id)}</b></td>
+    <td><a href="#/ch/${c.id}">${esc(c.title)}</a> <span class="mute" style="font-size:12px">· p.${c.pages[0]}–${c.pages[1]}</span></td>
+    <td class="mute" style="font-size:12px">${c.mode==="book" ? "기본서 대조" : "법령 비교"}</td>
+    <td>${!c.sources[1] ? '<span class="mute">—</span>' : full(c) ? okTag(`✓ ${c.sources[0]}/${c.sources[1]}`) : `<span class="tag bad">${c.sources[0]}/${c.sources[1]}</span>`}</td>
+    <td>${cur===c.id ? '<span class="tag plain">⏳ 하는 중</span>' : c.result ? okTag("✓ "+esc(c.result.updated)) + (c.result.failed ? ` <span class="tag bad">실패 ${c.result.failed}</span>` : "") : noTag("아직")}</td>
+    <td class="num">${c.result ? `${c.result.rows} · <b>${c.result.revise}</b>` : '<span class="mute">-</span>'}</td>
+    <td>${c.result && c.result.rows ? `<a href="#/errata" onclick="TAB='${c.id}';EF.show=200"><span class="tag plain" title="④에서 이 장 체크하기">${c.result.checked} / ${c.result.rows} →</span></a>` : '<span class="mute">-</span>'}</td>
+    <td>${!c.result ? '<span class="mute">-</span>' : c.in_errata && !APP.errata.stale ? okTag("✓") : `<a href="#/download">${noTag(xlsxTime() ? "다시 만들기" : "아직")}</a>`}</td></tr>
+    ${FOLD.has(c.id) ? slotRows(c) : ""}`;
+  $("view").innerHTML = pageHead("② 장별 판정", "장마다 ①~⑤ 현황을 한눈에 봅니다. 장을 체크하고 단계 버튼을 누르면 고른 장에만 그 단계를 차례로 합니다. 장이 많으면 나눠 골라 시간대를 갈라 돌려도 됩니다. ▸를 누르면 그 장의 법령별 구·신 자료가 보입니다.")
+  + (!chs.length ? noChapters() : `
+    <div class="kpis">${kpi("장", chs.length+"장")}${kpi("1 비교 자료", chs.filter(full).length+" / "+chs.length, "다 찬 장")}${kpi("2 판정", jd.length+" / "+chs.length)}${kpi("3 후보 · 수정 권고", jd.length ? sum("rows")+" · "+sum("revise") : "-")}${kpi("4 체크", jd.length ? sum("checked")+"건" : "-")}${kpi("5 정오표", xlsxTime() ? (APP.errata.stale || jd.some(c=>!c.in_errata) ? "다시 만들기" : "✓") : "-", xlsxTime() ? esc(xlsxTime())+"에 만듦" : "아직 안 만듦")}</div>
+    <div class="card">
+      <div class="row" style="gap:6px">
+        <b>고른 장에</b> <span class="mute">(${sel.length ? sel.length+"장: "+sel.map(c=>c.id).join(", ") : "아직 안 골랐어요"})</span>
+        ${btn(["fetch"], "1 최근 법령 받기")}${btn(["judge"], "2 판정")}<span class="mute">|</span>${btn(["fetch","judge"], "▶ 1→2 받고 판정", "primary")}
+        ${run && isBatch(j) ? `<button onclick="stopJob()" ${j.stopping?"disabled":""}>${j.stopping ? "멈추는 중…" : "■ 멈춤"}</button>` : ""}
+        <label class="mute" title="이미 판정한 장을 다시 판정하면 그 장의 ④ 체크는 기본값으로 돌아갑니다"><input type="checkbox" ${REDO?"checked":""} onchange="REDO=this.checked;renderJudge(true)"> 판정한 장도 다시 판정</label>
+      </div>
+      <table class="dash" style="margin-top:10px"><thead><tr>
+        <th style="width:28px"><input type="checkbox" ${chs.length && PICK.size===chs.length?"checked":""} ${dis} onchange="pickAllCh(this.checked)" title="모두"></th>
+        <th style="width:28px"><button class="iconbtn" style="border:0;background:none" onclick="foldAll()" title="모두 펼치기/접기">${FOLD.size===chs.length?"▾":"▸"}</button></th>
+        <th>장</th><th>제목</th><th>방식</th><th>1 비교 자료</th><th>2 판정</th><th class="num">3 후보 · 권고</th><th>4 체크</th><th>5 정오표</th></tr></thead>
+        <tbody>${chs.map(row).join("")}</tbody></table>
+      <div class="mute" style="margin-top:8px">「1 최근 법령 받기」는 법제처에서 현행을 새로 받고(같은 법령은 한 번만), 책 기준(구)판은 받아 둔 것을 씁니다. 개정기본서 대조 장은 받을 법령이 없어 건너뜁니다.
+        「2 판정」은 비어 있는 법령 칸을 자동으로 채운 뒤 판정하고, 이미 판정한 장은 건너뜁니다. 자료가 모자란 장은 건너뛰고 끝에 알려 줍니다. 멈춤은 지금 장을 끝낸 뒤 멈춥니다.</div>
+      <div id="alljob"></div></div>`);
+  updateJobBox("alljob");
+}
+function pickCh(id, on){ on ? PICK.add(id) : PICK.delete(id); saveSet("jev.pick", PICK); renderJudge(true) }
+function pickAllCh(on){ PICK = new Set(on ? APP.chapters.map(c=>c.id) : []); saveSet("jev.pick", PICK); renderJudge(true) }
+function foldCh(id){ FOLD.has(id) ? FOLD.delete(id) : FOLD.add(id); saveSet("jev.open", FOLD); renderJudge(true) }
+function foldAll(){ FOLD = new Set(FOLD.size === APP.chapters.length ? [] : APP.chapters.map(c=>c.id)); saveSet("jev.open", FOLD); renderJudge(true) }
+async function runSteps(steps){
+  const ids = APP.chapters.filter(c=>PICK.has(c.id)).map(c=>c.id);
+  const names = {fetch:"최근 법령 받기", judge:"판정"};
+  const again = steps.includes("judge") && REDO ? APP.chapters.filter(c=>PICK.has(c.id) && c.result).length : 0;
+  if(!confirm(`${ids.length}장(${ids.join(", ")})에 「${steps.map(s=>names[s]).join(" → ")}」을(를) 차례로 합니다.`
+    + (steps.includes("judge") ? "\n판정은 바뀐 조문마다 약 40초 · 기본서 대조는 4쪽마다 약 1분입니다." : "")
+    + (again ? `\n⚠ 이미 판정한 ${again}장을 다시 판정합니다. 그 장의 ④ 체크는 기본값으로 돌아갑니다.` : "") + "\n계속할까요?")) return;
+  try{ await api("/api/batch",{method:"POST",body:JSON.stringify({ids, steps, redo:REDO})}); toast("시작했습니다. 진행 상황은 아래 로그에 나옵니다.", 5000); refresh() }
+  catch(e){ toast(e.message, 8000) }
+}
+async function stopJob(){ try{ await api("/api/stop",{method:"POST"}); toast("지금 장을 끝내고 멈춥니다."); refresh() }catch(e){ toast(e.message) } }
+
+function renderResultPage(force){
+  const chs = APP.chapters, jd = judged();
+  const key = JSON.stringify(chs.map(c=>c.result));
+  if(!force && viewKey === key) return;
+  viewKey = key;
+  const sum = k => jd.reduce((a,c)=>a+c.result[k], 0);
+  $("view").innerHTML = pageHead("③ 판정 결과", "장마다 Codex가 찾은 책 영향 후보입니다. 수정확률 60% 이상이 「수정 권고」이고, ④ 정오 판정에서 처음부터 체크되어 있습니다.")
+  + (!chs.length ? noChapters() : !jd.length ? `<div class="card empty">아직 판정한 장이 없습니다. <a href="#/judge">② 장별 판정</a>에서 판정을 돌리세요.</div>` : `
+  <div class="kpis"><div class="kpi"><span class="mute">판정한 장</span><b>${jd.length} / ${chs.length}</b></div>
+    <div class="kpi"><span class="mute">바뀐 조문 · 대조 구간</span><b>${sum("changes")}</b></div>
+    <div class="kpi"><span class="mute">책 영향 후보</span><b>${sum("rows")}</b></div>
+    <div class="kpi"><span class="mute">수정 권고</span><b>${sum("revise")}</b></div>
+    <div class="kpi"><span class="mute">그대로 둠</span><b>${sum("rows")-sum("revise")}</b></div>
+    ${sum("failed") ? `<div class="kpi"><span class="mute">판정 실패</span><b class="bad">${sum("failed")}</b></div>` : ""}</div>
+  <div class="card"><table><thead><tr><th>장</th><th>제목</th><th>방식</th><th class="num">바뀐 조문</th><th class="num">후보</th><th class="num">수정 권고</th><th class="num">그대로</th><th class="num">실패</th><th>판정 시각</th><th></th></tr></thead><tbody>
+    ${chs.map(c=>{ const r = c.result; return r ? `<tr><td><b>${esc(c.id)}</b></td><td><a href="#/ch/${c.id}">${esc(c.title)}</a></td><td>${c.mode==="book"?"기본서 대조":"법령 비교"}</td>
+      <td class="num">${r.changes}</td><td class="num">${r.rows}</td><td class="num"><b>${r.revise}</b></td><td class="num">${r.rows-r.revise}</td>
+      <td class="num ${r.failed?"bad":"mute"}">${r.failed}</td><td class="mute">${esc(r.updated)}</td>
+      <td style="text-align:right"><button class="iconbtn" onclick="goErrata('${c.id}')" ${r.rows?"":"disabled"}>④ 체크하기</button></td></tr>`
+      : `<tr class="mute"><td>${esc(c.id)}</td><td>${esc(c.title)}</td><td colspan="8"><a href="#/ch/${c.id}">아직 판정 전</a></td></tr>` }).join("")}
+  </tbody></table></div>
+  <div class="row"><button class="big primary" onclick="goErrata('all')">④ 정오 판정으로 →</button></div>`);
+}
+
+/* ---------- ④ 정오 판정 — 책 전체 수정 후보 · 체크 · 수정 문구 · 메모 ---------- */
+let EF = {min:.2, show:200}, TAB = "all", decTimer = null;
+const eOn = e => { const d = DEC[e.id]; return d && "apply" in d ? d.apply : e.on_default };
+const eNew = e => { const d = DEC[e.id]; return d && d.new_text != null ? d.new_text : e.new };
+const editsShown = () => ERR.rows.filter(e => e.p >= EF.min && (TAB === "all" || e.ch === TAB));
+function goErrata(id){ TAB = id; EF.show = 200; location.hash = "#/errata" }
+const errHead = t => pageHead(t, `판정한 장 ${ERR.chapters.length}개 · 후보 ${ERR.rows.length}건 · 체크 ${ERR.rows.filter(eOn).length}건 · 정오표는 늘 책 전체 한 번에 나옵니다.`,
+  `<button onclick="openErrataDir()">폴더 열기</button>`);
+
+function renderErrata(force){
+  if(!force) return;  // 체크하는 동안 주기적 새로고침이 화면(펼친 근거 · 입력칸)을 덮지 않게
+  if(TAB !== "all" && !ERR.chapters.some(c=>c.id===TAB)) TAB = "all";
+  const tabs = ERR.chapters.length > 1 ? `<div class="seg" style="flex-wrap:wrap;margin:0 0 10px">${[["all","전체"], ...ERR.chapters.map(c=>[c.id, c.id+"장"])]
+    .map(([k,t])=>`<button class="${TAB===k?"on":""}" onclick="TAB='${k}';EF.show=200;renderErrata(true)" title="${esc(k==="all"?"책 전체":(ERR.chapters.find(c=>c.id===k)||{}).title)}">${esc(t)}</button>`).join("")}</div>` : "";
+  $("view").innerHTML = errHead("④ 정오 판정") + (ERR.rows.length ? tabs + editsCard()
+    : `<div class="card empty">아직 판정한 장이 없습니다. <a href="#/judge">② 장별 판정</a>에서 판정을 돌리면 수정 후보가 여기에 나옵니다.</div>`);
+}
+function editsCard(){
+  const all = ERR.rows, shown = editsShown(), on = all.filter(eOn).length;
+  const opt = (v, t, cur) => `<option value="${v}" ${String(cur)===String(v)?"selected":""}>${esc(t)}</option>`;
+  const ch = TAB !== "all" && ERR.chapters.find(c=>c.id===TAB);
+  return `<div class="card"><h2>수정 후보 · 체크 <span class="mute" style="font-weight:400">— 체크한 것만 정오표에 들어갑니다. 수정확률 60% 이상은 처음부터 체크되어 있습니다. 정오표는 늘 책 전체 한 번에 나옵니다.</span></h2>
+    <div class="row" style="margin-bottom:4px"><button class="big primary" onclick="exportDoc(true)">체크 끝 → 정오표 만들기 (⑤ 정오표 받기로)</button>
+      <label style="cursor:pointer;border:1px solid var(--line);border-radius:8px;padding:6px 12px" title="정오표 검토 HTML 에서 저장한 .json 이나, 「전체 후보」 시트를 고친 정오표 .xlsx">체크본 가져오기
+        <input type="file" accept=".json,.xlsx" hidden onchange="importReview(this.files[0]);this.value=''"></label></div>
+    <div class="mute" style="margin:0 0 10px;padding-bottom:10px;border-bottom:1px solid var(--line)">회의할 때는 「정오표_검토.pdf」를 인쇄하거나 「정오표_검토.html」에서 체크한 뒤 [체크 결과 저장] → 여기 「체크본 가져오기」. 엑셀은 「전체 후보」 시트의 반영(O) · 수정 문구 · 메모를 고쳐 올리면 됩니다.</div>
+    ${ch ? `<div class="laws" style="margin-bottom:8px"><b>${esc(ch.id)} ${esc(ch.title)}</b><br>${ch.laws.map(l=>`${esc(l.name)}: ${esc(l.old_header||"")} → <b>${esc(l.new_header||"")}</b>`).join("<br>")}</div>` : ""}
+    <div class="row" style="margin-bottom:8px">
+      <select onchange="EF.min=+this.value;EF.show=200;renderErrata(true)">${[[0,"확률 전체"],[.2,"20% 이상 (유지 숨김)"],[.4,"40% 이상"],[.6,"60% 이상"],[.8,"80% 이상"]].map(([v,t])=>opt(v,t,EF.min)).join("")}</select>
+      <button class="iconbtn" onclick="setEdits(true)">보이는 것 모두 체크</button><button class="iconbtn" onclick="setEdits(false)">보이는 것 모두 해제</button><button class="iconbtn" onclick="setEdits(null)">기본값으로</button>
+      <span class="mute">보이는 ${shown.length}건 · 전체 ${all.length}건 중 체크 <b id="oncount">${on}</b>건</span></div>
+    <div id="paras">${shown.slice(0, EF.show).map(editHtml).join("") || `<div class="empty">이 조건에 맞는 수정 후보가 없습니다.</div>`}</div>
+    ${shown.length > EF.show ? `<div class="row" style="margin-top:8px"><button onclick="EF.show+=200;renderErrata(true)">더 보기 (${shown.length - EF.show}건 남음)</button></div>` : ""}
+  </div>`;
+}
+// 기존 → 수정을 글자 단위로 비교해 바뀐 글자만 색칠 (기존 = 붉게, 수정 = 녹색, 나머지 그대로)
+function markPair(a, b){
+  const n = a.length, m = b.length;
+  let ra = [], rb = [];
+  if(n * m > 250000){ ra = [[a, 1]]; rb = [[b, 1]] }
+  else {
+    const L = Array.from({length: n+1}, () => new Uint16Array(m+1));
+    for(let i = n-1; i >= 0; i--) for(let j = m-1; j >= 0; j--) L[i][j] = a[i] === b[j] ? L[i+1][j+1] + 1 : Math.max(L[i+1][j], L[i][j+1]);
+    const push = (r, c, ch) => { const t = r[r.length-1]; if(t && t[1] === ch) t[0] += c; else r.push([c, ch]) };
+    let i = 0, j = 0;
+    while(i < n || j < m){
+      if(i < n && j < m && a[i] === b[j]){ push(ra, a[i++], 0); push(rb, b[j++], 0) }
+      else if(j < m && (i >= n || L[i][j+1] >= L[i+1][j])) push(rb, b[j++], 1);
+      else push(ra, a[i++], 1);
+    }
+  }
+  const tag = (r, c) => r.map(([t, ch]) => ch ? `<b class="${c}">${esc(t)}</b>` : esc(t)).join("");
+  return `${tag(ra, "mx")} → ${b ? tag(rb, "my") : '<b class="mx">(삭제)</b>'}`;
+}
+function editHtml(e){
+  const on = eOn(e), d = DEC[e.id] || {}, id = esc(e.id), book = (ERR.chapters.find(c=>c.id===e.ch)||{}).mode === "book";
+  const q = (t, v) => v ? `<span>${t}</span><div class="quote">${esc(v)}</div>` : "";
+  return `<div class="para ${on?"":"off"}" id="e${id}"><div class="no">${Math.round(e.p*100)}%</div><div class="body">
+    <div class="meta"><label class="adopt"><input type="checkbox" ${on?"checked":""} onchange="decideE('${id}',{apply:this.checked})"> 반영</label>
+      <span class="mute">${e.page ? "p."+e.page+" · " : ""}${esc(e.ch)}장 ${esc(e.ch_title.slice(0,16))}</span>
+      <span class="tag plain">${esc([e.law, e.article, e.title].filter(Boolean).join(" "))}</span>
+      ${e.judge_type ? `<span class="tag plain">${esc(e.judge_type)}</span>` : ""}${d.new_text != null ? `<span class="tag">직접 고침</span>` : ""}</div>
+    <div class="txt" style="margin-top:4px">${markPair(e.old, eNew(e))}</div>
+    <div class="mute" style="font-size:12.5px;margin-top:2px">${esc(e.reason)}</div>
+    <details><summary>근거 보기 · 수정 문구 고치기 · 메모</summary>
+      <div class="grid2" style="margin:6px 0">${q("교재", e.book_quote)}${q(book ? "우리 책" : "구 조문", e.old_law_quote)}${q(book ? "개정기본서" : "신 조문", e.new_law_quote)}
+        <span>수정 문구</span><input type="text" id="en${id}" value="${esc(eNew(e))}">
+        <span>메모</span><input type="text" id="em${id}" value="${esc(d.note||"")}" placeholder="저자 문의 · 회의 결과 등"></div>
+      <div class="row" style="margin-top:4px"><button class="iconbtn" onclick="saveE('${id}')">저장</button>
+        ${d.new_text != null ? `<button class="iconbtn" onclick="decideE('${id}',{new_text:null},true)">AI 제안으로 되돌리기</button>` : ""}</div></details>
+  </div></div>`;
+}
+function decideE(id, patch, rerender){
+  const cur = Object.assign({}, DEC[id]||{}, patch);
+  if(cur.new_text === null) delete cur.new_text;
+  if(cur.note === undefined) delete cur.note;
+  DEC[id] = cur;
+  if(rerender) renderErrata(true);
+  else { const el = $("e"+id), e = ERR.rows.find(x=>x.id===id); if(el) el.classList.toggle("off", !eOn(e)); const c = $("oncount"); if(c) c.textContent = ERR.rows.filter(eOn).length }
+  clearTimeout(decTimer); decTimer = setTimeout(pushDec, 400);
+}
+function saveE(id){
+  const e = ERR.rows.find(x=>x.id===id), v = $("en"+id).value.trim(), note = $("em"+id).value.trim();
+  decideE(id, {new_text: v !== e.new ? v : null, note: note || undefined}, true); toast("저장했습니다.");
+}
+function setEdits(v){
+  for(const e of (v === null ? ERR.rows : editsShown())){
+    if(v === null){ if(DEC[e.id]) delete DEC[e.id].apply } else DEC[e.id] = Object.assign({}, DEC[e.id]||{}, {apply:v}) }
+  renderErrata(true); pushDec();
+}
+async function pushDec(){
+  decTimer = null;
+  try{ await api("/api/decide",{method:"POST",body:JSON.stringify({decisions:DEC})}) }catch(e){ toast("체크 저장 실패: "+e.message, 8000) }
+}
+async function importReview(f){
+  if(!f) return;
+  try{ const j = await api("/api/import-review",{method:"POST",headers:{"X-Filename":encodeURIComponent(f.name)},body:f});
+    DEC = j.decisions; renderErrata(true);
+    toast(`체크본을 가져왔습니다: ${j.n}건 반영${j.miss ? ` · 맞추지 못한 줄 ${j.miss}건` : ""}. [체크 끝 → 정오표 만들기]를 누르면 파일에 들어갑니다.`, 9000);
+  }catch(e){ toast("가져오기 실패: "+e.message, 9000) }
+}
+async function exportDoc(go){
+  clearTimeout(decTimer); decTimer = null;
+  toast("정오표를 만드는 중입니다…", 20000);
+  try{ const j = await api("/api/export",{method:"POST",body:JSON.stringify({decisions:DEC})});
+    toast(`정오표를 만들었습니다 (체크 ${j.checked}건 / 후보 ${j.total}건). 아래에서 받으세요.`, 7000);
+    if(go && route().view !== "download") location.hash = "#/download";
+    else { await refresh(); viewKey = null; renderView(true) }
+  }catch(e){ toast(e.message, 9000) }
+}
+async function openErrataDir(){ try{ await api("/api/errata/open",{method:"POST"}) }catch(e){ toast(e.message) } }
+
+/* ---------- ⑤ 정오표 받기 — 만든 파일을 큰 버튼으로 (보기는 새 탭, 엑셀·zip 은 내려받기) ---------- */
+function renderDownload(force){
+  const key = JSON.stringify(APP.errata);
+  if(!force && viewKey === key) return;
+  viewKey = key;
+  $("view").innerHTML = errHead("⑤ 정오표 받기") + (ERR.rows.length ? getCard()
+    : `<div class="card empty">아직 정오표를 만들 수정 후보가 없습니다. <a href="#/judge">② 장별 판정</a>에서 판정을 돌리세요.</div>`);
+}
+function getCard(){
+  const fs = APP.errata.files, f = suf => fs.find(x => x.name.endsWith(suf));
+  const url = (x, dl) => `/errata-files/${encodeURIComponent(x.name)}${dl?"?dl=1":""}`;
+  const tile = (x, icon, name, sub, dl, main) => x ? `<a class="${main?"main":""}" href="${url(x, dl)}" ${dl?"":'target="_blank"'}><b>${icon} ${name}</b><span>${sub}</span></a>` : "";
+  const on = ERR.rows.filter(eOn).length;
+  if(!f("_정오표.xlsx")) return `<div class="card"><h2>정오표 받기</h2>
+    <div class="row"><span>아직 정오표 파일을 만들지 않았습니다. 지금 체크된 <b>${on}건</b>으로 만듭니다.</span>
+    <button class="big primary" onclick="exportDoc()">정오표 만들기</button></div></div>`;
+  return `<div class="card"><h2>정오표 받기 <span class="mute" style="font-weight:400">— 책 전체 한 번에 · ${esc(f("_정오표.xlsx").time)}에 만든 파일</span></h2>
+    ${APP.errata.stale ? `<div class="alert" style="margin:0 0 8px"><b>체크를 바꾼 뒤 아직 파일을 다시 만들지 않았습니다.</b> 아래 파일은 바꾸기 전 내용입니다.
+      <button class="primary" style="margin-left:8px" onclick="exportDoc()">지금 체크(${on}건)로 다시 만들기</button></div>` : ""}
+    <div class="dl">
+      ${tile(f("_정오표.xlsx"), "📊", "엑셀 정오표", "체크한 것 + 전체 후보 · 저자에게 보내기", true, true)}
+      ${tile(f("_정오표_검토.pdf"), "🖨", "PDF 정오표", "인쇄해서 회의 · 체크칸 · 메모칸", false)}
+      ${tile(f("_정오표_검토.html"), "✔", "브라우저 체크하기", "브라우저에서 체크 → [체크 결과 저장]", false)}
+      ${tile(f("_정오표_게시판.html"), "📋", "HTML 정오표", "체크한 것만 · 게시판에 붙이기", false)}
+      <a href="/zip"><b>⬇ 전부 한 번에 받기</b><span>위 파일 모두 · zip 하나</span></a>
+    </div>
+    <div class="row" style="margin-top:8px"><button class="iconbtn" onclick="exportDoc()">지금 체크(${on}건)로 다시 만들기</button>
+      <button class="iconbtn" onclick="openErrataDir()">폴더 열기</button></div></div>
+    <div class="card"><h2>이렇게 쓰세요</h2>
+      <ol style="margin:0;padding-left:20px;line-height:1.9">
+        <li><b>저자에게 보낼 때</b> — 「엑셀 정오표」를 받아 메일에 붙이세요. 첫 시트가 정오표이고, 원고에서 위치를 못 찾은 줄은 「확인」 칸에 표시됩니다.</li>
+        <li><b>회의할 때</b> — 「PDF 정오표」를 인쇄해 체크칸에 표시하거나, 「브라우저 체크하기」로 같이 보며 체크한 뒤 [체크 결과 저장]을 누르세요.</li>
+        <li><b>체크한 것을 다시 올릴 때</b> — ④ 정오 판정 위쪽 「체크본 가져오기」로 저장한 파일(.json · .xlsx)을 고른 뒤, 여기서 [다시 만들기]를 누르세요.</li>
+        <li><b>회사 게시판</b> — 「HTML 정오표」를 열어 내용을 복사해 붙이세요. 장마다 표가 나뉘고 법령 구·신 버전이 함께 나옵니다.</li>
+      </ol></div>`;
+}
+
 window.addEventListener("dragover", e=>e.preventDefault());
 window.addEventListener("drop", e=>{ e.preventDefault();
   const f = e.dataTransfer && e.dataTransfer.files[0];
   if(f && route().view==="book" && /\.pdf$/i.test(f.name)) uploadBook(f);
   else if(f) toast("파일은 점선 칸이나 '비교 자료' 카드 위에 놓아 주세요.");
 });
-window.addEventListener("message", e=>{ if(e.data && e.data.jev==="applied"){ toast(`반영 완료 — 체크한 ${e.data.checked ?? ""}건 처리. 아래 '④ 반영 파일'에서 확인하세요.`, 6000); refresh() } });
-window.addEventListener("hashchange", ()=>{ chRendered=null; CHS=null; refresh().then(()=>renderView(true)) });
+window.addEventListener("hashchange", ()=>{
+  if(decTimer){ clearTimeout(decTimer); decTimer = null; pushDec() }  // 안 보낸 체크는 화면을 떠나기 전에 저장
+  chRendered=null; CHS=null; ERR=null; viewKey=null; refresh().then(()=>renderView(true)) });
 refresh().then(()=>renderView(true));
 </script></body></html>

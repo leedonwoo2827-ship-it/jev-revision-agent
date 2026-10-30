@@ -104,9 +104,10 @@ def fetch_book():
     print(f"[받기] 완료 {ok}건" + (f" · 실패 {len(fail)}건: {', '.join(fail)}" if fail else "") + f" → {LAW_DIR}")
 
 
-def fetch_chapter(cid, only_missing=False):
+def fetch_chapter(cid, only_missing=False, fresh=None):
     """장에 연결된 법령(법률·시행령)의 구판(책 기준)·현행을 01_비교자료에 받는다.
-    only_missing=True 이면 비어 있는 칸만 받는다 (판정 시작 때 자동 보충용)."""
+    only_missing=True 이면 비어 있는 칸만 받는다 (판정 시작 때 자동 보충용).
+    fresh(set)를 주면 현행을 법제처에서 새로 받는다 — 여러 장을 한꺼번에 받을 때 같은 법령은 한 번만 (받은 이름을 fresh 에 모음)."""
     c = config.chapter(cid)
     if not c.get("laws"):
         raise SystemExit("이 장에 연결된 법령이 없습니다. 차례 화면에서 법령을 확인하세요.")
@@ -119,7 +120,9 @@ def fetch_chapter(cid, only_missing=False):
             if which == "old" and not ver:
                 print(f"[받기] {law['name']}: 책 기준 버전 정보가 없어 구판은 건너뜀")
                 continue
-            text = cached(name, ver)
+            text = cached(name, ver, refresh=which == "new" and fresh is not None and name not in fresh)
+            if which == "new" and fresh is not None:
+                fresh.add(name)
             slot = f"law_{which}_{law['abbr']}"
             (d / f"{slot}.txt").write_text(text, encoding="utf-8")
             others = [p.name for p in d.glob(f"{slot}.*") if p.suffix.lower() in (".pdf", ".hwpx")]

@@ -9,7 +9,8 @@ workspace/
     02_변경목록/             changes.json
     03_판정/                 results.json, cache/
     04_검토/                 errata.html
-    05_반영/                 반영내역 · 반영본 · 게시판 정오표
+    05_반영/                 반영내역 · 반영본 · 게시판 정오표 (장별, 명령줄 jev.apply)
+  _정오표/                   책 전체 체크(decisions.json) · 정오표 (엑셀 · PDF · 검토 HTML · 게시판 HTML)
 """
 import json
 import os
@@ -20,6 +21,7 @@ ROOT = Path(__file__).resolve().parent.parent
 WS = Path(os.environ.get("JEV_WORKSPACE", ROOT / "workspace"))
 BACKUP = WS.parent / "backup"
 BOOK_DIR = WS / "00_책"
+ERRATA_DIR = WS / "_정오표"  # 책 전체 체크 · 정오표 (장 폴더 '<번호>_…' 와 겹치지 않게 '_' 로 시작)
 STAGES = ["00_원고", "01_비교자료", "02_변경목록", "03_판정", "04_검토", "05_반영"]
 SRC_EXTS = {".pdf", ".hwpx", ".txt"}
 

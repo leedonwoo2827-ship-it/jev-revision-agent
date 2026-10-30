@@ -1,4 +1,4 @@
-"""JEV 개정 에이전트 — 웹 콘솔 서버 (127.0.0.1 전용, 표준 라이브러리만 사용).
+"""JEV 개정 에이전트 — 웹 콘솔 서버 (이 PC 전용 localhost, 표준 라이브러리만 사용).
 
   GET  /                         콘솔 화면 (jev/console.html)
   GET  /api/state                책 · 차례 · 장 목록 · 작업 상태
@@ -18,23 +18,35 @@
   POST /api/ch/fetch?id=         법제처에서 구·신 법령 받기 (백그라운드)
   POST /api/ch/run?id=           추출 → 비교 → Codex 판정 → 검토 HTML (백그라운드)
   POST /api/ch/open?id=&stage=   탐색기로 폴더 열기
-  GET  /review/<id>              검토 내역 화면
-  POST /apply                    [반영]
+  POST /api/batch                고른 장에 법령 받기 · 판정을 차례로 ({ids, steps:[fetch, judge], redo}) (백그라운드)
+  POST /api/stop                 일괄 작업: 지금 장을 끝내고 멈춤
+  GET  /api/errata               ④ 책 전체 수정 후보 · 체크 · 만든 정오표
+  POST /api/decide               ④ 체크 저장 ({decisions})
+  POST /api/import-review        체크본 가져오기 (.json · .xlsx, X-Filename 헤더)
+  POST /api/export               ⑤ 책 전체 정오표 만들기
+  POST /api/errata/open          _정오표 폴더 열기
+  GET  /errata-files/<name>[?dl=1]
+  GET  /zip                      정오표 파일 모두 zip
+  GET  /review/<id>              장별 검토 내역 화면 (예전 방식)
+  POST /apply                    장별 [반영] (예전 방식)
   GET  /files/<id>/<stage>/<name>[?dl=1]
 """
 import json
 import mimetypes
 import os
+import socket
 import sys
 import threading
 import traceback
 import urllib.parse
 import webbrowser
+import zipfile
 from datetime import datetime
+from io import BytesIO
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import apply, codex_auth, config, fetch_law, report, toc
+from . import apply, codex_auth, config, errata, fetch_law, report, toc
 from .pipeline import run as run_pipeline
 
 CONSOLE = Path(__file__).with_name("console.html")
@@ -46,14 +58,14 @@ class Job:
     def __init__(self):
         self.lock = threading.Lock()
         self.name, self.ch, self.running, self.error, self.error_kind = None, None, False, None, None
-        self.log, self.started, self.ended = [], None, None
+        self.log, self.started, self.ended, self.stop = [], None, None, False
 
     def start(self, name, ch, fn):
         with self.lock:
             if self.running:
                 return False
             self.name, self.ch, self.running, self.error, self.error_kind = name, ch, True, None, None
-            self.log, self.started, self.ended = [], datetime.now(), None
+            self.log, self.started, self.ended, self.stop = [], datetime.now(), None, False
         threading.Thread(target=self._run, args=(fn,), daemon=True).start()
         return True
 
@@ -93,7 +105,7 @@ class Job:
 
     def state(self):
         return {"name": self.name, "ch": self.ch, "running": self.running, "error": self.error,
-                "error_kind": self.error_kind,
+                "error_kind": self.error_kind, "stopping": self.stop,
                 "log": self.log[-300:],
                 "started": self.started.strftime("%H:%M:%S") if self.started else None,
                 "ended": self.ended.strftime("%H:%M:%S") if self.ended else None}
@@ -106,15 +118,19 @@ def _mtime(p):
     return datetime.fromtimestamp(p.stat().st_mtime).strftime("%m-%d %H:%M")
 
 
-def results(cid):
+def results(cid, dec=None):
+    """판정 요약. dec(④ 체크)를 주면 그 장에서 체크된 건수도 센다 (안 건드린 줄은 수정확률 60% 이상이 체크)."""
     f = config.stage(cid, "03_판정") / "results.json"
     if not f.exists():
         return None
     d = json.loads(f.read_text(encoding="utf-8"))
     rows = d["rows"]
+    dec = dec or {}
     return {"mode": d.get("mode", "law"), "changes": len(d["changes"]), "rows": len(rows),
             "revise": sum(r["p_revise"] >= report.THRESHOLD for r in rows),
-            "failed": sum(c["failed"] for c in d["changes"]), "laws": d["laws"], "updated": _mtime(f)}
+            "checked": sum(dec.get(f"{cid}-{r['id']}", {}).get("apply", r["p_revise"] >= report.THRESHOLD) for r in rows),
+            "failed": sum(c["failed"] for c in d["changes"]), "laws": d["laws"], "updated": _mtime(f),
+            "mtime": f.stat().st_mtime}
 
 
 def chapter_slots(cid, c):
@@ -125,25 +141,33 @@ def chapter_slots(cid, c):
     return out
 
 
-def chapter_brief(c):
+def chapter_brief(c, dec=None, made=None):
+    """made = 책 전체 정오표(xlsx)를 만든 시각(mtime). 그 뒤에 다시 판정한 장은 정오표에 아직 안 들어간 것."""
     cid = c["id"]
     sl = chapter_slots(cid, c)
-    r = results(cid)
+    r = results(cid, dec)
     applied = list(config.stage(cid, "05_반영").glob("정오표_게시판_*.html"))
     return {"id": cid, "title": c["title"], "pages": c["pages"], "mode": c.get("mode", "law"),
             "kind": c.get("kind", "chapter"), "sources": [sum(bool(s["file"]) for s in sl), len(sl)],
-            "revise": r["revise"] if r else None, "applied": len(applied)}
+            "revise": r["revise"] if r else None, "applied": len(applied),
+            "result": {k: r[k] for k in ("changes", "rows", "revise", "checked", "failed", "updated")} if r else None,
+            "in_errata": bool(r and made and made >= r["mtime"]),
+            "slots": [{k: x.get(k) for k in ("law", "which", "label", "file", "hint")} for x in sl],
+            "ref_pages": c.get("ref_pages")}
 
 
 def app_state():
     pdf = config.book_pdf()
+    dec = errata.load_decisions()
+    made = max((p.stat().st_mtime for p in config.ERRATA_DIR.glob("*_정오표.xlsx")), default=None)         if config.ERRATA_DIR.exists() else None
     return {"workspace": str(config.WS),
             "book": {"file": pdf.name, "size": pdf.stat().st_size} if pdf else None,
             "toc": config.toc(),
-            "chapters": [chapter_brief(c) for c in config.chapters()],
+            "chapters": [chapter_brief(c, dec, made) for c in config.chapters()],
             "backups": config.backups(),
             "job": JOB.state(),
-            "codex": codex_auth.state()}
+            "codex": codex_auth.state(),
+            "errata": {"files": errata.files(), "stale": errata.stale()}}
 
 
 def chapter_state(cid):
@@ -160,6 +184,47 @@ def chapter_state(cid):
 
 
 # ---------- 동작 ----------
+def batch(ids, steps, redo=False):
+    """고른 장마다 차례로: fetch = 법제처에서 최근 법령(현행) 받기 · judge = 판정.
+    한 장이 막혀도 다음 장으로 넘어가고, 이미 판정한 장은 redo 가 아니면 건너뛴다."""
+    chs = [c for c in config.chapters() if c["id"] in ids]
+    fresh, bad, skip = set(), [], []
+    for k, c in enumerate(chs, 1):
+        if JOB.stop:
+            print(f"[일괄] 멈춤 — {k - 1}/{len(chs)}장까지 했습니다.")
+            break
+        cid = c["id"]
+        print(f"[일괄] {k}/{len(chs)}장 — {cid} {c['title']}")
+        try:
+            if "fetch" in steps:
+                if c.get("mode") == "book" or not c.get("laws"):
+                    print(f"[일괄] {cid}장: 법령 비교가 아니라 받을 법령이 없습니다.")
+                else:
+                    fetch_law.fetch_chapter(cid, fresh=fresh)
+            if "judge" in steps:
+                if results(cid) and not redo:
+                    print(f"[일괄] {cid}장: 이미 판정했습니다 — 건너뜀 (다시 하려면 '판정한 장도 다시'를 켜세요)")
+                    skip.append(cid)
+                else:
+                    run_pipeline(cid)
+        except SystemExit as e:
+            print(f"[일괄] {cid}장 건너뜀: {e}")
+            bad.append(cid)
+        except (OSError, ValueError) as e:  # 법제처 접속 실패 등 — 다음 장은 계속
+            print(f"[일괄] {cid}장 실패: {e}")
+            bad.append(cid)
+    if bad:
+        raise SystemExit(f"{len(bad)}개 장은 끝내지 못했습니다: {', '.join(bad)} — 로그를 보고 장 화면에서 자료를 채운 뒤 다시 누르세요.")
+
+
+def errata_zip():
+    buf = BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for f in errata.files():
+            z.write(config.ERRATA_DIR / f["name"], f["name"])
+    return buf.getvalue()
+
+
 def book_upload(filename, data):
     if Path(filename).suffix.lower() != ".pdf":
         raise ValueError("교재는 PDF로 올려 주세요.")
@@ -316,6 +381,20 @@ class H(BaseHTTPRequestHandler):
                 if f:
                     return self._send(200, f.read_bytes(), "text/html; charset=utf-8")
                 return self._send(404, "아직 판정 결과가 없습니다.", "text/plain; charset=utf-8")
+            if path == "/api/errata":
+                return self._send(200, errata.state())
+            if path == "/zip":
+                name = f"{errata.book_name()}_정오표_전체.zip"
+                return self._send(200, errata_zip(), "application/zip",
+                                  {"Content-Disposition": "attachment; filename*=UTF-8''" + urllib.parse.quote(name)})
+            if path.startswith("/errata-files/"):
+                f = (config.ERRATA_DIR / path.split("/", 2)[2]).resolve()
+                if f.parent == config.ERRATA_DIR.resolve() and f.is_file():
+                    ctype = mimetypes.guess_type(f.name)[0] or "application/octet-stream"
+                    if ctype.startswith("text/"):
+                        ctype += "; charset=utf-8"
+                    extra = {"Content-Disposition": "attachment; filename*=UTF-8''" + urllib.parse.quote(f.name)}                         if q.get("dl") or f.suffix == ".xlsx" else {}
+                    return self._send(200, f.read_bytes(), ctype, extra)
             if path.startswith("/files/"):
                 _, _, cid, rel = path.split("/", 3)
                 base = config.chapter_dir(cid).resolve()
@@ -394,6 +473,29 @@ class H(BaseHTTPRequestHandler):
                 d = config.chapter_dir(cid) / q.get("stage", "")
                 os.startfile(str(d if d.exists() else config.chapter_dir(cid)))
                 return self._send(200, {"ok": True})
+            if path == "/api/batch":
+                d = json.loads(body)
+                if not d.get("ids") or not d.get("steps"):
+                    raise ValueError("장을 하나 이상 고르세요.")
+                name = {"fetch": "법령 받기", "judge": "판정"}
+                label = "일괄 " + " → ".join(name[x] for x in d["steps"])
+                ok = JOB.start(label, None, lambda: batch(d["ids"], d["steps"], bool(d.get("redo"))))
+                return self._send(200 if ok else 409, {"ok": True} if ok else busy)
+            if path == "/api/stop":
+                JOB.stop = JOB.running
+                return self._send(200, {"ok": True})
+            if path == "/api/decide":
+                errata.save_decisions(json.loads(body)["decisions"])
+                return self._send(200, {"ok": True})
+            if path == "/api/import-review":
+                n, miss, dec = errata.import_review(body, fname)
+                return self._send(200, {"ok": True, "n": n, "miss": miss, "decisions": dec})
+            if path == "/api/export":
+                return self._send(200, {"ok": True, **errata.run((json.loads(body) if body else {}).get("decisions"))})
+            if path == "/api/errata/open":
+                config.ERRATA_DIR.mkdir(parents=True, exist_ok=True)
+                os.startfile(str(config.ERRATA_DIR))
+                return self._send(200, {"ok": True})
             if path == "/apply":
                 d = json.loads(body)
                 return self._send(200, apply.run(d, d.get("chapter")))
@@ -408,8 +510,12 @@ class H(BaseHTTPRequestHandler):
         pass
 
 
+class Server6(ThreadingHTTPServer):
+    address_family = socket.AF_INET6
+
+
 def serve(port=8765, open_browser=True):
-    url = f"http://127.0.0.1:{port}/"
+    url = f"http://localhost:{port}/"
     try:
         httpd = ThreadingHTTPServer(("127.0.0.1", port), H)
     except OSError:
@@ -417,10 +523,16 @@ def serve(port=8765, open_browser=True):
         if open_browser:
             webbrowser.open(url)
         return
+    try:  # 'localhost' 가 IPv6(::1)로 풀리는 PC를 위해 ::1 에도 연다
+        httpd6 = Server6(("::1", port), H)
+        threading.Thread(target=httpd6.serve_forever, daemon=True).start()
+    except OSError:
+        pass
     config.WS.mkdir(parents=True, exist_ok=True)
     codex_auth.check_async(deep=False)  # 켜질 때는 가볍게 (실제 호출 확인은 좌하단 [새로고침])
     print(f"[JEV 개정 에이전트] {url}")
     print(f"[JEV 개정 에이전트] 워크스페이스: {config.WS}")
+    print(f"브라우저가 안 열리면 주소창에 {url} 을 직접 입력하세요. (127.0.0.1 말고 localhost)")
     print("이 창을 닫으면 콘솔도 멈춥니다. (종료: Ctrl+C)")
     if open_browser:
         webbrowser.open(url)

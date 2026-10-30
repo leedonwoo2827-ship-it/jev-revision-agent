@@ -35,18 +35,14 @@ def locate(pages, row):
     return None, None
 
 
-def run(decisions, ch=None):
-    cid = ch or decisions.get("chapter", "09")
-    ch = f"ch{cid}"
+def resolve(cid, dec):
+    """dec = {행 id: {apply, new_text?, note?}} → 원고에서 위치를 찾아 상태를 매긴다 (파일은 쓰지 않음).
+    반환: res(results.json), pages, records, edits(쪽별 바꿀 자리), outside(수동 확인)."""
     res = json.loads((config.stage(cid, "03_판정") / "results.json").read_text(encoding="utf-8"))
     book = json.loads((config.stage(cid, "00_원고") / "book.json").read_text(encoding="utf-8"))
     pages = [dict(p) for p in book["pages"]]
     edits = {p["page"]: [] for p in pages}
     outside = []
-    dec = {int(d["id"]): d for d in decisions["items"]}
-    reviewer = decisions.get("reviewer") or "-"
-    ts = datetime.now().strftime("%Y%m%d-%H%M")
-
     records = []
     for r in res["rows"]:
         d = dec.get(r["id"], {})
@@ -71,6 +67,16 @@ def run(decisions, ch=None):
                         rec["status"] = "반영"
                         rec["page"] = p["page"]
         records.append(rec)
+    return res, pages, records, edits, outside
+
+
+def run(decisions, ch=None):
+    cid = ch or decisions.get("chapter", "09")
+    ch = f"ch{cid}"
+    dec = {int(d["id"]): d for d in decisions["items"]}
+    reviewer = decisions.get("reviewer") or "-"
+    ts = datetime.now().strftime("%Y%m%d-%H%M")
+    res, pages, records, edits, outside = resolve(cid, dec)
 
     out = config.stage(cid, "05_반영")
 
@@ -102,7 +108,7 @@ def run(decisions, ch=None):
     applied = [r for r in records if r["apply"]]
     lines = [f"# 반영내역 — {res['title']} ({ch})", "",
              f"- 반영일시: {datetime.now():%Y-%m-%d %H:%M}", f"- 반영자: {reviewer}",
-             f"- 적용 법령: " + "; ".join(f"{l['name']} {l['old_header']} → {l['new_header']}" for l in res["laws"]),
+             f"- 적용 법령: " + "; ".join(f"{l['name']} {l.get('old_header', '')} → {l.get('new_header', '')}" for l in res["laws"]),
              f"- 전체 {len(records)}건 / 반영 체크 {len(applied)}건 / 원고 반영 {sum(r['status'] == '반영' for r in records)}건", "",
              "| # | 쪽 | 조문 | 유형 | 수정확률 | 상태 | 기존문구 | 수정문구 | 메모 |", "|---|---|---|---|---|---|---|---|---|"]
     cell = lambda s: str(s).replace("|", "\\|").replace("\n", " ")
@@ -122,7 +128,7 @@ def run(decisions, ch=None):
         f"<td><del>{html.escape(r['old_text'])}</del></td><td><ins>{html.escape(r['new_text'])}</ins></td>"
         f"<td>{html.escape(r['reason'])}</td></tr>"
         for r in sorted(applied, key=lambda r: r["page"]) if r["status"] != "변경없음")
-    laws = "<br>".join(f"{html.escape(l['name'])}: {html.escape(l['old_header'])} → <b>{html.escape(l['new_header'])}</b>"
+    laws = "<br>".join(f"{html.escape(l['name'])}: {html.escape(l.get('old_header', ''))} → <b>{html.escape(l.get('new_header', ''))}</b>"
                        for l in res["laws"])
     board = (f"<h1>정오표 — CHAPTER {cid} {html.escape(res['title'])}</h1>"
              f"<p class=meta>{laws}<br>반영일 {datetime.now():%Y-%m-%d} · 반영자 {html.escape(reviewer)}</p>"
