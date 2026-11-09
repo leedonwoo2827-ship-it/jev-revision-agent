@@ -22,6 +22,9 @@ WS = Path(os.environ.get("JEV_WORKSPACE", ROOT / "workspace"))
 BACKUP = WS.parent / "backup"
 BOOK_DIR = WS / "00_책"
 ERRATA_DIR = WS / "_정오표"  # 책 전체 체크 · 정오표 (장 폴더 '<번호>_…' 와 겹치지 않게 '_' 로 시작)
+SETTINGS = ROOT / "_settings.json"  # 이 PC의 콘솔 설정 (워크스페이스 밖 — [새 책 넣기] 백업에 휩쓸리지 않게, git 제외)
+ENGINES = {"codex": "Codex (ChatGPT)", "auto": "자동 (Codex 먼저, 한도면 Claude)", "claude": "Claude"}
+DEFAULTS = {"engine": "codex", "wait_hours": 5}
 STAGES = ["00_원고", "01_비교자료", "02_변경목록", "03_판정", "04_검토", "05_반영"]
 SRC_EXTS = {".pdf", ".hwpx", ".txt"}
 
@@ -33,6 +36,21 @@ def _read(p, default=None):
 def _write(p, data):
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
+# ---------- 설정 (판정 엔진 · 한도 대기) ----------
+def settings():
+    return {**DEFAULTS, **_read(SETTINGS, {})}
+
+
+def save_settings(body):
+    s = settings()
+    if body.get("engine") in ENGINES:
+        s["engine"] = body["engine"]
+    if "wait_hours" in body:
+        s["wait_hours"] = max(0, min(48, float(body["wait_hours"] or 0)))
+    _write(SETTINGS, s)
+    return s
 
 
 # ---------- 책 ----------

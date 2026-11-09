@@ -13,13 +13,15 @@
   POST /api/codex/refresh        Codex 로그인 상태 + 실제 짧은 호출로 확인 (백그라운드)
   POST /api/codex/login          새 명령창에서 codex login (relogin=true 면 먼저 로그아웃)
   POST /api/codex/logout         codex logout
+  POST /api/claude/refresh|login|logout   Claude(claude.ai OAuth) 계정 — Codex 와 같은 모양
+  POST /api/settings             판정 엔진(codex · auto · claude) · 한도면 기다릴 시간
   POST /api/ch/upload?id=&slot=  비교자료 올리기 (본문 = 파일, X-Filename 헤더)
   POST /api/ch/config?id=        비교 방식(law/book) · 개정기본서 쪽 범위 저장
   POST /api/ch/fetch?id=         법제처에서 구·신 법령 받기 (백그라운드)
   POST /api/ch/run?id=           추출 → 비교 → Codex 판정 → 검토 HTML (백그라운드)
   POST /api/ch/open?id=&stage=   탐색기로 폴더 열기
   POST /api/batch                고른 장에 법령 받기 · 판정을 차례로 ({ids, steps:[fetch, judge], redo}) (백그라운드)
-  POST /api/stop                 일괄 작업: 지금 장을 끝내고 멈춤
+  POST /api/stop                 지금 작업 멈춤 (진행 중 호출만 끝내 캐시에 남기고 바로)
   GET  /api/errata               ④ 책 전체 수정 후보 · 체크 · 만든 정오표
   POST /api/decide               ④ 체크 저장 ({decisions})
   POST /api/import-review        체크본 가져오기 (.json · .xlsx, X-Filename 헤더)
@@ -37,6 +39,7 @@ import os
 import socket
 import sys
 import threading
+import time
 import traceback
 import urllib.parse
 import webbrowser
@@ -46,7 +49,8 @@ from io import BytesIO
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import apply, codex_auth, config, errata, fetch_law, report, toc
+from . import apply, claude_auth, codex_auth, config, errata, fetch_law, llm, report, toc
+from .judge_codex import EngineStop, LimitError
 from .pipeline import run as run_pipeline
 
 CONSOLE = Path(__file__).with_name("console.html")
@@ -58,7 +62,7 @@ class Job:
     def __init__(self):
         self.lock = threading.Lock()
         self.name, self.ch, self.running, self.error, self.error_kind = None, None, False, None, None
-        self.log, self.started, self.ended, self.stop = [], None, None, False
+        self.log, self.started, self.ended, self.stop, self.waiting = [], None, None, False, None
 
     def start(self, name, ch, fn):
         with self.lock:
@@ -66,6 +70,8 @@ class Job:
                 return False
             self.name, self.ch, self.running, self.error, self.error_kind = name, ch, True, None, None
             self.log, self.started, self.ended, self.stop = [], datetime.now(), None, False
+            self.waiting = None
+            llm.CANCEL.clear()
         threading.Thread(target=self._run, args=(fn,), daemon=True).start()
         return True
 
@@ -97,15 +103,18 @@ class Job:
             self.error, self.error_kind = str(e), getattr(e, "kind", None)
             if self.error_kind == "auth":
                 codex_auth.mark_expired()
+            elif self.error_kind == "claude_auth":
+                claude_auth.mark_expired()
             print(f"[오류] {e}")
-            real.write(traceback.format_exc())
+            if not isinstance(e, EngineStop):
+                real.write(traceback.format_exc())
         finally:
             sys.stdout = real
             self.running, self.ended = False, datetime.now()
 
     def state(self):
         return {"name": self.name, "ch": self.ch, "running": self.running, "error": self.error,
-                "error_kind": self.error_kind, "stopping": self.stop,
+                "error_kind": self.error_kind, "stopping": self.stop, "waiting": self.waiting,
                 "log": self.log[-300:],
                 "started": self.started.strftime("%H:%M:%S") if self.started else None,
                 "ended": self.ended.strftime("%H:%M:%S") if self.ended else None}
@@ -159,7 +168,8 @@ def chapter_brief(c, dec=None, made=None):
 def app_state():
     pdf = config.book_pdf()
     dec = errata.load_decisions()
-    made = max((p.stat().st_mtime for p in config.ERRATA_DIR.glob("*_정오표.xlsx")), default=None)         if config.ERRATA_DIR.exists() else None
+    made = max((p.stat().st_mtime for p in config.ERRATA_DIR.glob("*_정오표.xlsx")), default=None) \
+        if config.ERRATA_DIR.exists() else None
     return {"workspace": str(config.WS),
             "book": {"file": pdf.name, "size": pdf.stat().st_size} if pdf else None,
             "toc": config.toc(),
@@ -167,6 +177,8 @@ def app_state():
             "backups": config.backups(),
             "job": JOB.state(),
             "codex": codex_auth.state(),
+            "claude": claude_auth.state(),
+            "settings": config.settings(), "engines": config.ENGINES, "engine_now": llm.label(),
             "errata": {"files": errata.files(), "stale": errata.stale()}}
 
 
@@ -184,37 +196,106 @@ def chapter_state(cid):
 
 
 # ---------- 동작 ----------
+POLL_MIN = 30          # 풀리는 시각을 모를 때 다시 해 보는 간격
+CHUNK_MIN = 60         # 시각을 알아도 길게는 이만큼씩만 자고 확인
+AFTER_RESET_SEC = 90
+
+
+def keep_awake(on=True):
+    """한도를 기다리는 동안 PC 절전을 막는다 (Windows)."""
+    if os.name != "nt":
+        return
+    try:
+        import ctypes
+        ctypes.windll.kernel32.SetThreadExecutionState(0x80000000 | (0x00000001 if on else 0))
+    except Exception:
+        pass
+
+
+def wait_limit(e, deadline):
+    """한도가 풀릴 때까지 잔다. 풀렸을 것 같으면 True, 최대 시간을 넘기거나 [멈춤]이면 False."""
+    now = time.time()
+    if now >= deadline:
+        return False
+    wake = min(e.until + AFTER_RESET_SEC if e.until and e.until > now else now + POLL_MIN * 60,
+               now + CHUNK_MIN * 60, deadline)
+    JOB.waiting = datetime.fromtimestamp(wake).strftime("%H:%M")
+    print(f"⏸ 사용 한도 — {JOB.waiting}에 다시 해 봅니다. 콘솔 창(run.bat)은 켜 두세요. 기다리는 동안 PC 절전을 막습니다.")
+    while time.time() < wake:
+        if llm.CANCEL.wait(10):
+            JOB.waiting = None
+            return False
+    JOB.waiting = None
+    llm.reset()
+    print("▶ 다시 해 봅니다")
+    return True
+
+
 def batch(ids, steps, redo=False):
     """고른 장마다 차례로: fetch = 법제처에서 최근 법령(현행) 받기 · judge = 판정.
-    한 장이 막혀도 다음 장으로 넘어가고, 이미 판정한 장은 redo 가 아니면 건너뛴다."""
+    자료가 모자란 장은 건너뛰고 다음 장으로. 이미 판정한 장은 redo 가 아니면 건너뛴다.
+    사용 한도면 설정 wait_hours 까지 기다렸다가 같은 장부터 이어서, 로그인 만료 · [멈춤]이면 전체를 멈춘다."""
     chs = [c for c in config.chapters() if c["id"] in ids]
+    st = config.settings()
+    hours = st["wait_hours"]
+    print(f"[일괄] {len(chs)}장 — 판정 엔진 {config.ENGINES[st['engine']]} · 한도면 최대 {hours:g}시간 기다림")
     fresh, bad, skip = set(), [], []
-    for k, c in enumerate(chs, 1):
-        if JOB.stop:
-            print(f"[일괄] 멈춤 — {k - 1}/{len(chs)}장까지 했습니다.")
-            break
-        cid = c["id"]
-        print(f"[일괄] {k}/{len(chs)}장 — {cid} {c['title']}")
-        try:
-            if "fetch" in steps:
-                if c.get("mode") == "book" or not c.get("laws"):
-                    print(f"[일괄] {cid}장: 법령 비교가 아니라 받을 법령이 없습니다.")
-                else:
-                    fetch_law.fetch_chapter(cid, fresh=fresh)
-            if "judge" in steps:
-                if results(cid) and not redo:
-                    print(f"[일괄] {cid}장: 이미 판정했습니다 — 건너뜀 (다시 하려면 '판정한 장도 다시'를 켜세요)")
-                    skip.append(cid)
-                else:
-                    run_pipeline(cid)
-        except SystemExit as e:
-            print(f"[일괄] {cid}장 건너뜀: {e}")
-            bad.append(cid)
-        except (OSError, ValueError) as e:  # 법제처 접속 실패 등 — 다음 장은 계속
-            print(f"[일괄] {cid}장 실패: {e}")
-            bad.append(cid)
+    keep_awake(True)
+    try:
+        for k, c in enumerate(chs, 1):
+            if JOB.stop:
+                print(f"[일괄] 멈춤 — {k - 1}/{len(chs)}장까지 했습니다.")
+                return
+            cid = c["id"]
+            deadline = time.time() + hours * 3600
+            while True:
+                print(f"[일괄] {k}/{len(chs)}장 — {cid} {c['title']}")
+                try:
+                    if "fetch" in steps:
+                        if c.get("mode") == "book" or not c.get("laws"):
+                            print(f"[일괄] {cid}장: 법령 비교가 아니라 받을 법령이 없습니다.")
+                        else:
+                            fetch_law.fetch_chapter(cid, fresh=fresh)
+                    if "judge" in steps:
+                        if results(cid) and not redo:
+                            print(f"[일괄] {cid}장: 이미 판정했습니다 — 건너뜀 (다시 하려면 '판정한 장도 다시'를 켜세요)")
+                            skip.append(cid)
+                        else:
+                            run_pipeline(cid)
+                    break
+                except LimitError as e:
+                    print(f"  {e}")
+                    if not wait_limit(e, deadline):
+                        if JOB.stop:
+                            print(f"[일괄] 멈춤 — {k - 1}/{len(chs)}장까지 했습니다. {cid}장은 끝난 조문까지 기억해 둡니다.")
+                            return
+                        raise
+                except EngineStop as e:
+                    if getattr(e, "kind", None) == "cancel":
+                        print(f"[일괄] 멈춤 — {k - 1}/{len(chs)}장까지 했습니다. {cid}장은 끝난 조문까지 기억해 둡니다.")
+                        return
+                    raise
+                except SystemExit as e:
+                    print(f"[일괄] {cid}장 건너뜀: {e}")
+                    bad.append(cid)
+                    break
+                except (OSError, ValueError) as e:  # 법제처 접속 실패 등 — 다음 장은 계속
+                    print(f"[일괄] {cid}장 실패: {e}")
+                    bad.append(cid)
+                    break
+    finally:
+        keep_awake(False)
     if bad:
         raise SystemExit(f"{len(bad)}개 장은 끝내지 못했습니다: {', '.join(bad)} — 로그를 보고 장 화면에서 자료를 채운 뒤 다시 누르세요.")
+
+
+def judge_one(cid):
+    try:
+        run_pipeline(cid)
+    except EngineStop as e:
+        if getattr(e, "kind", None) != "cancel":
+            raise
+        print(f"[판정] 멈춤 — 끝난 조문은 기억해 두므로 [판정 시작]을 다시 누르면 이어서 합니다.")
 
 
 def errata_zip():
@@ -458,6 +539,16 @@ class H(BaseHTTPRequestHandler):
                 return self._send(200, {"ok": True})
             if path == "/api/codex/logout":
                 return self._send(200, {"ok": True, "out": codex_auth.logout()})
+            if path == "/api/claude/refresh":
+                claude_auth.check_async(deep=True)
+                return self._send(200, {"ok": True})
+            if path == "/api/claude/login":
+                claude_auth.login()
+                return self._send(200, {"ok": True})
+            if path == "/api/claude/logout":
+                return self._send(200, {"ok": True, "out": claude_auth.logout()})
+            if path == "/api/settings":
+                return self._send(200, {"ok": True, "settings": config.save_settings(json.loads(body))})
             if path == "/api/ch/upload":
                 saved, note = ch_upload(cid, q.get("slot", ""), fname, body)
                 return self._send(200, {"ok": True, "saved": saved, "note": note})
@@ -467,7 +558,7 @@ class H(BaseHTTPRequestHandler):
                 ok = JOB.start("법제처에서 법령 받기", cid, lambda: fetch_law.fetch_chapter(cid))
                 return self._send(200 if ok else 409, {"ok": True} if ok else busy)
             if path == "/api/ch/run":
-                ok = JOB.start("개정사항 판정", cid, lambda: run_pipeline(cid))
+                ok = JOB.start("개정사항 판정", cid, lambda: judge_one(cid))
                 return self._send(200 if ok else 409, {"ok": True} if ok else busy)
             if path == "/api/ch/open":
                 d = config.chapter_dir(cid) / q.get("stage", "")
@@ -482,7 +573,9 @@ class H(BaseHTTPRequestHandler):
                 ok = JOB.start(label, None, lambda: batch(d["ids"], d["steps"], bool(d.get("redo"))))
                 return self._send(200 if ok else 409, {"ok": True} if ok else busy)
             if path == "/api/stop":
-                JOB.stop = JOB.running
+                if JOB.running:
+                    JOB.stop = True
+                    llm.CANCEL.set()
                 return self._send(200, {"ok": True})
             if path == "/api/decide":
                 errata.save_decisions(json.loads(body)["decisions"])
@@ -530,6 +623,7 @@ def serve(port=8765, open_browser=True):
         pass
     config.WS.mkdir(parents=True, exist_ok=True)
     codex_auth.check_async(deep=False)  # 켜질 때는 가볍게 (실제 호출 확인은 좌하단 [새로고침])
+    claude_auth.check_async(deep=False)
     print(f"[JEV 개정 에이전트] {url}")
     print(f"[JEV 개정 에이전트] 워크스페이스: {config.WS}")
     print(f"브라우저가 안 열리면 주소창에 {url} 을 직접 입력하세요. (127.0.0.1 말고 localhost)")

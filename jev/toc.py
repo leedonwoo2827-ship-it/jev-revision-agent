@@ -291,7 +291,7 @@ CODEX_SCHEMA = {
 
 def codex_extract(pdf_path):
     """책갈피·CONTENTS로 못 찾을 때: 각 쪽 첫 줄들을 Codex에 보여 주고 차례를 받는다."""
-    from .judge_codex import ask_codex
+    from . import llm
     doc = fitz.open(pdf_path)
     texts = _pages(doc)
     lines = []
@@ -301,7 +301,7 @@ def codex_extract(pdf_path):
     prompt = ("아래는 교재 PDF의 각 쪽 첫머리다. 본문 장(chapter)과 부록의 차례를 뽑아라. "
               "start/end 는 PDF 쪽 번호(p숫자)다. 표지·머리말·차례 쪽은 제외. 파일을 읽거나 명령을 실행하지 마라.\n\n"
               + "\n".join(lines))
-    res = ask_codex(prompt, schema=CODEX_SCHEMA)
+    res = llm.ask(prompt, CODEX_SCHEMA)
     baseline = build_baseline(texts)
     entries = [dict(e, printed=None) for e in res["chapters"]]
     attach_laws(entries, baseline, Path(pdf_path).stem)
