@@ -6,7 +6,7 @@
   POST /api/restore              백업 불러오기 (지금 작업은 먼저 백업)
   POST /api/book/upload          교재 PDF 전체 올리기 → 차례 자동 추출
   POST /api/book/toc             차례 확정 (JSON) → 장 워크스페이스 생성
-  POST /api/book/toc-codex       Codex로 차례 다시 뽑기 (백그라운드)
+  POST /api/book/toc-codex       판정 엔진으로 차례 다시 뽑기 (백그라운드)
   POST /api/book/laws            이 책의 법령 목록 저장 (+ reattach: 장마다 기본 연결 다시)
   POST /api/book/laws-fetch      이 책의 법령(현행·책 기준판)을 법제처에서 한꺼번에 받기 (백그라운드)
   GET  /api/ch?id=09             장 상세 (비교자료 칸 · 판정 요약 · 폴더별 파일)
@@ -523,7 +523,7 @@ class H(BaseHTTPRequestHandler):
                 pdf = config.book_pdf()
                 if not pdf:
                     raise ValueError("먼저 교재 PDF를 올려 주세요.")
-                ok = JOB.start("Codex로 차례 뽑기", None, lambda: (config.save_toc(toc.codex_extract(pdf)),
+                ok = JOB.start("AI로 차례 뽑기", None, lambda: (config.save_toc(toc.codex_extract(pdf)),
                                                                 print("[차례] Codex 결과를 불러왔습니다. 확인 후 확정하세요.")))
                 return self._send(200 if ok else 409, {"ok": True} if ok else busy)
             if path == "/api/book/laws":

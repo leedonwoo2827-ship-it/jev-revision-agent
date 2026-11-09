@@ -289,11 +289,11 @@ function renderBook(force){
         <td><input type="number" value="${c.pages[1]}" oninput="TOCDRAFT.chapters[${i}].pages[1]=+this.value"></td>
         <td>${lawChips(c, i, onLaws)}</td>
         <td style="white-space:nowrap"><button class="iconbtn" title="아래에 행 추가 (장 나누기)" onclick="addRow(${i})">＋</button><button class="iconbtn" title="행 삭제" onclick="delRow(${i})">✕</button></td></tr>`).join("")}
-      </tbody></table>` : `<div class="empty">차례를 찾지 못했습니다. <button onclick="addRow(-1)">＋ 직접 행 추가</button> 또는 [Codex로 다시 뽑기]</div>`}
+      </tbody></table>` : `<div class="empty">차례를 찾지 못했습니다. <button onclick="addRow(-1)">＋ 직접 행 추가</button> 또는 [AI로 다시 뽑기]</div>`}
     <div class="row" style="margin-top:12px">
       <button class="primary" onclick="confirmToc()" ${!TOCDRAFT.chapters.length?"disabled":""}>차례 확정 → 장별 워크스페이스 만들기</button>
       ${t.confirmed && APP.chapters.length ? `<a href="#/judge"><button>다음: ② 장별 판정 →</button></a>` : ""}
-      <button onclick="codexToc()" ${j.running?"disabled":""} title="이 PC에 Codex 로그인이 되어 있어야 합니다">Codex로 다시 뽑기</button>
+      <button onclick="codexToc()" ${j.running?"disabled":""} title="왼쪽 아래 판정 엔진(Codex · Claude)으로 읽습니다">AI로 다시 뽑기</button>
       <span class="mute">PDF 쪽 번호 기준입니다. 끝 쪽에는 기본문제·정답해설까지 포함하세요.</span>
     </div>
   </div>
@@ -375,7 +375,7 @@ function jobAlert(j){
         <span>브라우저가 열리면 ChatGPT 계정으로 로그인한 뒤, 같은 버튼을 다시 누르세요. (왼쪽 아래 Codex 메뉴에서도 할 수 있습니다)</span></div>
       <details><summary>직접 하려면</summary>명령창(cmd)에서 <code>codex logout</code> 다음 <code>codex login</code> — 또는 프로그램 폴더의 <b>codex-다시로그인.bat</b>.
         <button class="iconbtn" onclick="copyLogin()">명령 복사</button><br>'codex login status'가 로그인됨이라고 해도 토큰이 만료됐을 수 있습니다.</details>
-      ${j.name==="Codex로 차례 뽑기" ? `<div class="mute" style="margin-top:4px">차례는 Codex 없이도 아래 표에서 직접 고칠 수 있습니다.</div>` : ""}
+      ${j.name==="AI로 차례 뽑기" ? `<div class="mute" style="margin-top:4px">차례는 AI 없이도 아래 표에서 직접 고칠 수 있습니다.</div>` : ""}
       <details><summary>원문 오류 보기</summary>${esc(raw)}</details>`
     : `<b>⚠ ${esc(j.name)} 작업이 멈췄습니다.</b><div style="margin-top:4px;overflow-wrap:anywhere">${esc(j.error)}</div>`}</div>`;
 }
@@ -481,7 +481,7 @@ async function restoreBook(name){
   if(!confirm(`'${name}' 을(를) 불러올까요?\n지금 작업은 먼저 backup 폴더로 옮겨집니다.`)) return;
   try{ await api("/api/restore",{method:"POST",body:JSON.stringify({name})}); TOCDRAFT=null; LAWDRAFT=null; LAWDIRTY=false; await refresh(); renderView(true); toast("불러왔습니다.") }catch(e){ toast(e.message) }
 }
-async function codexToc(){ try{ await api("/api/book/toc-codex",{method:"POST"}); toast("Codex가 차례를 읽는 중입니다 (1~2분)"); refresh() }catch(e){ toast(e.message) } }
+async function codexToc(){ try{ await api("/api/book/toc-codex",{method:"POST"}); toast("판정 엔진이 차례를 읽는 중입니다 (1~2분)"); refresh() }catch(e){ toast(e.message) } }
 
 /* ---------- 장 화면 ---------- */
 let chRendered = null, chRun = null;
