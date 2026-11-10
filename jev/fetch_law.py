@@ -55,6 +55,56 @@ def fetch(name, version=None):
     raise SystemExit("본문을 받지 못했습니다. 법제처 화면에서 직접 저장해 _context 에 넣어 주세요.")
 
 
+HST_RE = re.compile(r"lsViewLsHst2\('(\d+)',\s*'(\d{8})',\s*'(\d+)',\s*'(\d{8})',\s*'[YN]',\s*'\d+'\s*,\s*'([^']*)'\)")
+
+
+def history(name):
+    """법제처 연혁: [{seq, anc(공포일), no(공포번호), ef(시행일), kind, title, header}] — 최근 판이 앞.
+    없는 법령이면 SystemExit."""
+    frame = _get(BASE + urllib.parse.quote("/법령/" + name.replace(" ", ""), safe="/(),"))
+    m = re.search(r"lsiSeq=(\d+)", frame)
+    if not m:
+        raise SystemExit(f"법제처에서 찾지 못했습니다: {name}")
+    seq = m.group(1)
+    page = _get(f"{BASE}/LSW/lsInfoP.do?lsiSeq={seq}&chrClsCd=010202&urlMode=lsInfoP&ancYnChk=0")
+    lid = re.search(r'id="lsId"\s+name="lsId"\s+value="(\d+)"', page)
+    if not lid:
+        raise SystemExit(f"법제처 연혁을 찾지 못했습니다: {name}")
+    t = _get(BASE + "/LSW/lsHstListR.do", data=f"lsiSeq={seq}&lsId={lid.group(1)}",
+             referer=f"{BASE}/LSW/lsInfoP.do?lsiSeq={seq}")
+    t = t.split('id="lsHstDivENG"')[0]  # 영문 연혁은 빼고
+    out = []
+    for li in t.split("<li")[1:]:  # 판마다 따로 읽는다 (머리글이 다음 판 것과 엇갈리지 않게)
+        m = HST_RE.search(li)
+        if not m:
+            continue
+        s, a, n, e, k = m.groups()
+        ti = re.search(r"<b>\s*\d+\.\s*([^<]+?)\s*</b>", li)
+        hd = re.search(r"\[시행[^\]]*\]\s*\[[^\]]*\]", li)
+        out.append({"seq": s, "anc": a, "no": n, "ef": e, "kind": k,
+                    "title": " ".join(ti.group(1).split()) if ti else name,
+                    "header": " ".join(hd.group(0).split()) if hd else
+                    f"[시행 {int(e[:4])}. {int(e[4:6])}. {int(e[6:])}.] [제{n}호, {int(a[:4])}. {int(a[4:6])}. {int(a[6:])}., {k}]"})
+    return out
+
+
+def version_at(name, date, hist=None):
+    """date(YYYYMMDD)에 시행 중이던 판 → ('공포번호,공포일@시행일', 연혁 항목). 그때 아직 없던 법령이면 (None, None)."""
+    hist = hist if hist is not None else history(name)
+    on = [h for h in hist if h["ef"] <= date]
+    if not on:
+        return None, None
+    h = max(on, key=lambda h: (h["ef"], h["anc"]))
+    return f"{h['no']},{h['anc']}@{h['ef']}", h
+
+
+def current(hist, today=None):
+    """연혁 중 오늘 시행 중인 판 (시행 예정 판은 뺌)."""
+    today = today or time.strftime("%Y%m%d")
+    on = [h for h in hist if h["ef"] <= today]
+    return max(on, key=lambda h: (h["ef"], h["anc"])) if on else (hist[0] if hist else None)
+
+
 def _body(seq, ef):
     body = _get(BASE + "/LSW/lsInfoR.do",
                 data=f"lsiSeq={seq}&chrClsCd=010202&efYd={ef}&ancYnChk=0",

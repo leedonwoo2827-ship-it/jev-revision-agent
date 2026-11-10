@@ -203,6 +203,32 @@ def rescan_suggest(bl, pdf):
     return bl
 
 
+def norm_date(s):
+    """'2025. 1. 31.' · '2025-01-31' · '20250131' → '20250131'. 못 읽으면 ''."""
+    m = re.match(r"\D*(\d{4})\D*?(\d{1,2})\D+(\d{1,2})\D*$", s or "") or re.match(r"\D*(\d{4})(\d{2})(\d{2})\D*$", s or "")
+    return f"{m.group(1)}{int(m.group(2)):02d}{int(m.group(3)):02d}" if m else ""
+
+
+def fmt_date(d):
+    return f"{int(d[:4])}. {int(d[4:6])}. {int(d[6:])}." if d and len(d) == 8 else ""
+
+
+def book_date(bl):
+    """책 기준일(YYYYMMDD): 직접 적은 날 → 없으면 목록 법령의 책 기준 버전 중 가장 늦은 시행일(없으면 공포일).
+    자동으로 채운 버전(연혁)은 셈에서 뺀다 — 그걸로 다시 기준일이 밀리지 않게."""
+    if bl.get("date"):
+        return bl["date"]
+    days = []
+    for l in bl.get("laws", []):
+        v = l.get("version") or ""
+        if not v or l.get("auto"):
+            continue
+        m = re.search(r"@(\d{8})", v) or re.search(r",(\d{8})", v)
+        if m:
+            days.append(m.group(1))
+    return max(days) if days else ""
+
+
 def _law_ref(law, abbr):
     return {"name": law["name"], "abbr": abbr, "fetch_name": law["name"].replace(" ", ""),
             "old_version": law.get("version", ""), "old_header": law.get("header", "")}

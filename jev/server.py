@@ -8,6 +8,8 @@
   POST /api/book/toc             차례 확정 (JSON) → 장 워크스페이스 생성
   POST /api/book/toc-codex       판정 엔진으로 차례 다시 뽑기 (백그라운드)
   POST /api/book/laws            이 책의 법령 목록 저장 (+ reattach: 장마다 기본 연결 다시)
+  POST /api/book/law-scan        AI로 장별 법령 찾기 (백그라운드) — 제목이 법 이름이 아닌 장의 비교 법령 제안
+  POST /api/book/law-add         AI 제안 법령을 이 책의 법령 목록에 넣기 (책 기준 판은 연혁에서 자동)
   POST /api/book/laws-fetch      이 책의 법령(현행·책 기준판)을 법제처에서 한꺼번에 받기 (백그라운드)
   GET  /api/ch?id=09             장 상세 (비교자료 칸 · 판정 요약 · 폴더별 파일)
   POST /api/codex/refresh        Codex 로그인 상태 + 실제 짧은 호출로 확인 (백그라운드)
@@ -49,7 +51,7 @@ from io import BytesIO
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import apply, claude_auth, codex_auth, config, errata, fetch_law, llm, report, toc
+from . import apply, claude_auth, codex_auth, config, errata, fetch_law, law_scan, llm, report, toc
 from .judge_codex import EngineStop, LimitError
 from .pipeline import run as run_pipeline
 
@@ -187,6 +189,7 @@ def app_state():
     return {"workspace": str(config.WS),
             "book": {"file": pdf.name, "size": pdf.stat().st_size} if pdf else None,
             "toc": book_toc(pdf),
+            "toc_date": toc.book_date({**((config.toc() or {}).get("baseline") or {}), "date": ""}),
             "chapters": [chapter_brief(c, dec, made) for c in config.chapters()],
             "backups": config.backups(),
             "job": JOB.state(),
@@ -376,12 +379,57 @@ def _norm_version(v):
     return f"{m.group(1)},{m.group(2)}{int(m.group(3)):02d}{int(m.group(4)):02d}" + (f"@{ef.group(1)}" if ef else "")
 
 
+def auto_versions(bl):
+    """책 기준 버전이 빈 법령 → 법제처 연혁에서 책 기준일에 시행 중이던 판을 찾아 채운다.
+    같은 기준일로 한 번 해 본 법령은 다시 묻지 않는다(실패·그때 없던 법령 포함)."""
+    date = toc.book_date(bl)
+    if not date:
+        return
+    for l in bl.get("laws", []):
+        if (l.get("version") and not l.get("auto")) or l.get("auto_tried") == date:
+            continue  # 책·사람이 적은 버전은 그대로, 자동 버전은 기준일이 바뀌면 다시 찾는다
+        l["auto_tried"] = date
+        try:
+            ver, h = fetch_law.version_at(l["name"], date)
+        except (SystemExit, OSError) as e:
+            l["auto_note"] = f"법제처에서 찾지 못함 ({e})"
+            print(f"[법령] {l['name']}: 책 기준 판 자동 찾기 실패 — {e}")
+            continue
+        if not ver:
+            l["auto_note"] = "책 기준일엔 아직 없던 법령"
+            continue
+        l.update(version=ver, header=h["header"], auto="연혁", auto_note="")
+        print(f"[법령] {l['name']}: 책 기준({toc.fmt_date(date)}) 판 → {h['header']}")
+
+
+def book_law_add(body):
+    """③의 AI 제안 칩을 눌렀을 때: 그 법령을 이 책의 법령 목록에 넣는다(책 기준 판은 연혁에서 자동).
+    장에 켜는 것은 화면 초안(TOCDRAFT)에서 하고, [차례 확정] 때 저장된다."""
+    t = config.toc()
+    if not t:
+        raise ValueError("먼저 교재 PDF를 올려 주세요.")
+    bl = t.setdefault("baseline", {"page": None, "laws": [], "source": None})
+    have = {l["name"] for l in bl.get("laws", [])}
+    for n in body.get("names", []):
+        n = " ".join(n.split())
+        if n and n not in have:
+            bl.setdefault("laws", []).append({"name": n, "version": "", "checked": True, "header": "", "line": "",
+                                              "from": "AI 장별 찾기"})
+            have.add(n)
+    auto_versions(bl)
+    bl["suggest"] = [x for x in bl.get("suggest", []) if x["name"] not in have]
+    config.save_toc(t)
+    return t
+
+
 def book_laws(body):
     """이 책의 법령 목록 저장. 법령 이름만 넣어도 되고(구판 버전은 비워 둠), with_family 면 시행령·시행규칙도 함께."""
     t = config.toc()
     if not t:
         raise ValueError("먼저 교재 PDF를 올려 주세요.")
     bl = t.setdefault("baseline", {"page": None, "laws": [], "source": None})
+    if "date" in body:
+        bl["date"] = toc.norm_date(body.get("date") or "")
     old = {l["name"]: l for l in bl.get("laws", [])}
     laws = []
     for l in body.get("laws", []):
@@ -390,10 +438,13 @@ def book_laws(body):
             continue
         prev = old.get(name, {})
         ver = _norm_version(l.get("version", prev.get("version", "")))
+        if ver != prev.get("version", ""):  # 사람이 버전을 고쳤으면 자동 표시는 지운다
+            prev = {k: v for k, v in prev.items() if k not in ("auto", "header")}
         laws.append({**prev, "name": name, "version": ver, "checked": bool(l.get("checked", True)),
                      "header": prev.get("header") or (f"[책 기준 {ver}]" if ver else ""),
                      "line": prev.get("line", "")})
     bl["laws"] = laws
+    auto_versions(bl)
     bl["suggest"] = [x for x in bl.get("suggest", []) if x["name"] not in {l["name"] for l in laws}]
     if not bl.get("source") and laws:
         bl["source"] = "직접 입력"
@@ -545,6 +596,11 @@ class H(BaseHTTPRequestHandler):
                 return self._send(200 if ok else 409, {"ok": True} if ok else busy)
             if path == "/api/book/laws":
                 return self._send(200, {"ok": True, "toc": book_laws(json.loads(body))})
+            if path == "/api/book/law-scan":
+                ok = JOB.start("AI로 장별 법령 찾기", None, law_scan.run)
+                return self._send(200 if ok else 409, {"ok": True} if ok else busy)
+            if path == "/api/book/law-add":
+                return self._send(200, {"ok": True, "toc": book_law_add(json.loads(body))})
             if path == "/api/book/laws-fetch":
                 ok = JOB.start("법제처에서 책 법령 받기", None, fetch_law.fetch_book)
                 return self._send(200 if ok else 409, {"ok": True} if ok else busy)

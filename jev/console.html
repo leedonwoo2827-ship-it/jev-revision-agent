@@ -147,6 +147,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 <script>
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const fmtYmd = d => /^\d{8}$/.test(d||"") ? `${+d.slice(0,4)}. ${+d.slice(4,6)}. ${+d.slice(6)}.` : (d||"");
 const kb = n => n > 1048576 ? (n/1048576).toFixed(1)+"MB" : Math.max(1, Math.round(n/1024))+"KB";
 const api = async (url, opt) => { const r = await fetch(url, opt); const j = await r.json().catch(()=>({error:"응답 오류"})); if(!r.ok || j.ok===false) throw new Error(j.error||r.status); return j };
 function toast(t, ms=3500){ const e=$("toast"); e.textContent=t; e.style.display="block"; e.onclick=()=>e.style.display="none"; clearTimeout(e._t); e._t=setTimeout(()=>e.style.display="none",ms) }
@@ -223,9 +224,9 @@ function syncDrafts(t){
     TOCDRAFT.chapters.forEach(c => c.law_names = (c.laws||[]).map(l=>l.name));
   }
   const bl = (t && t.baseline) || {laws:[], suggest:[]};
-  const sig = JSON.stringify([t && t.book, bl.laws, bl.suggest]);
+  const sig = JSON.stringify([t && t.book, bl.laws, bl.suggest, bl.date]);
   if(t && (!LAWDRAFT || (!LAWDIRTY && LAWDRAFT._sig !== sig))) {
-    LAWDRAFT = {_sig: sig, laws: JSON.parse(JSON.stringify(bl.laws||[])), suggest: JSON.parse(JSON.stringify(bl.suggest||[]))};
+    LAWDRAFT = {_sig: sig, laws: JSON.parse(JSON.stringify(bl.laws||[])), suggest: JSON.parse(JSON.stringify(bl.suggest||[])), date: fmtYmd(bl.date)};
     LAWDIRTY = false;
   }
 }
@@ -254,13 +255,16 @@ function renderBook(force){
       bl.source==="법령적용기준" ? `책 p.${bl.page} [법령적용기준]에서 찾음`
       : bl.source==="법령 원문 머리글" ? `책에 실린 법령 원문 머리글에서 찾음 (p.${bl.page}~)`
       : bl.source==="직접 입력" ? "직접 넣은 목록" : "책에서 기준 버전 표시를 찾지 못했습니다 — 아래에 직접 넣어 주세요"}${LAWDIRTY?' · <b class="bad">저장 안 됨</b>':""}</span></h2>
-    <div class="mute" style="margin-bottom:6px">체크한 법령이 장마다 연결되어 <b>구판(책 기준) ↔ 현행</b>을 비교합니다. 책 기준 버전을 모르면 비워 둘 수 있습니다. 그 법령은 비교에서 빠지고, 구판 파일을 장 화면 구 칸에 넣으면 함께 비교합니다.</div>
+    <div class="mute" style="margin-bottom:6px">체크한 법령이 장마다 연결되어 <b>구판(책 기준) ↔ 현행</b>을 비교합니다. 책 기준 버전을 비워 두고 저장하면 법제처 연혁에서 <b>책 기준일에 시행 중이던 판</b>을 찾아 채웁니다(출처 「연혁 자동」). 못 찾은 법령은 비교에서 빠집니다.</div>
+    <div class="row" style="margin-bottom:8px"><span>책 기준일</span>
+      <input type="text" value="${esc(LAWDRAFT.date||"")}" placeholder="${esc(APP.toc_date ? fmtYmd(APP.toc_date)+" (자동)" : "예: 2025. 1. 31.")}" style="width:170px" oninput="LAWDRAFT.date=this.value;lawDirty(false)">
+      <span class="mute">비우면 위 목록에서 책에 적힌 기준 버전 중 가장 늦은 시행일${APP.toc_date ? ` — 지금 <b>${esc(fmtYmd(APP.toc_date))}</b>` : ""}</span></div>
     <table id="lawtable"><thead><tr><th style="width:42px">사용</th><th>법령 이름</th><th style="width:230px">책 기준 버전 <span style="font-weight:400">(공포번호,공포일@시행일)</span></th><th style="width:90px">출처</th><th style="width:40px"></th></tr></thead><tbody>
       ${LAWDRAFT.laws.map((l,i)=>`<tr>
         <td><input type="checkbox" ${l.checked!==false?"checked":""} onchange="LAWDRAFT.laws[${i}].checked=this.checked;lawDirty()"></td>
         <td>${esc(l.name)}</td>
         <td><input type="text" value="${esc(l.version||"")}" placeholder="예: 20645, 2025.1.7 — 비워도 됨" oninput="LAWDRAFT.laws[${i}].version=this.value;lawDirty(false)"></td>
-        <td class="mute">${l.page ? "p."+l.page : (l.version ? "직접" : "—")}</td>
+        <td class="mute">${l.page ? "p."+l.page : l.auto ? `<span class="ok" title="${esc(l.header||"")}">연혁 자동</span>` : l.version ? "직접" : l.auto_note ? `<span class="bad" title="${esc(l.auto_note)}">못 찾음</span>` : "—"}</td>
         <td><button class="iconbtn" title="빼기" onclick="LAWDRAFT.laws.splice(${i},1);lawDirty()">✕</button></td></tr>`).join("")
       || `<tr><td colspan="5" class="mute">아직 없습니다. 아래에 법령 이름을 넣으세요.</td></tr>`}
     </tbody></table>
@@ -294,8 +298,11 @@ function renderBook(force){
       <button class="primary" onclick="confirmToc()" ${!TOCDRAFT.chapters.length?"disabled":""}>차례 확정 → 장별 워크스페이스 만들기</button>
       ${t.confirmed && APP.chapters.length ? `<a href="#/judge"><button>다음: ② 장별 판정 →</button></a>` : ""}
       <button onclick="codexToc()" ${j.running?"disabled":""} title="왼쪽 아래 판정 엔진(Codex · Claude)으로 읽습니다">AI로 다시 뽑기</button>
+      <button onclick="lawScan()" ${j.running||!TOCDRAFT.chapters.length?"disabled":""} title="제목이 법 이름이 아닌 장마다 판정 엔진을 한 번 불러, 비교할 법령을 제안받습니다">AI로 장별 법령 찾기</button>
       <span class="mute">PDF 쪽 번호 기준입니다. 끝 쪽에는 기본문제·정답해설까지 포함하세요.</span>
     </div>
+    <div class="mute" style="margin-top:6px;font-size:12px">「AI로 장별 법령 찾기」: 제목이 법 이름이 아닌 장(관련법령 · 부록 제외)마다 본문을 읽혀 비교할 법령을 찾습니다(장마다 엔진 1번).
+      법제처에 실제로 있는 법령만 남기고, <b>책 이후 개정</b> 여부를 붙입니다. 확신 80% 이상 + 책 이후 개정은 미리 켜 두고, 나머지는 칩을 눌러 켭니다. 다 보면 [차례 확정].</div>
   </div>
   ${APP.backups.length ? `<div class="card"><h2><span class="n">↺</span>이전 책 (백업) <span class="mute" style="font-weight:400">— backup/ 폴더 · 불러오면 지금 작업은 먼저 백업됩니다</span></h2>
     <table><tbody>${APP.backups.map(b=>`<tr><td>${esc(b.book||"(책 없음)")}</td><td class="mute">${esc(b.name.slice(0,15))} · 장 ${b.chapters}개</td>
@@ -318,7 +325,35 @@ function lawChips(c, i, onLaws){
   let prevFam = null;
   return all.map((n,k)=>{ const fam = lawFam(n), lbl = fam===prevFam ? lawShort(n) : n; prevFam = fam;
     return `<span class="lchip ${names.includes(n)?"on":""}" title="${esc(n)}" onclick="toggleLaw(${i}, ${k})">${esc(lbl)}</span>` }).join("")
-    + (names.length ? "" : '<div class="mute" style="font-size:11.5px">모두 꺼져 있으면 개정기본서 대조로 진행</div>');
+    + (names.length ? "" : '<div class="mute" style="font-size:11.5px">모두 꺼져 있으면 개정기본서 대조로 진행</div>')
+    + sugChips(c, i);
+}
+// AI 장별 법령 찾기 제안 — 아직 이 장에 안 켜진 것만. 누르면 이 책의 법령 목록에 넣고(책 기준 판 자동) 이 장에 켠다.
+function sugChips(c, i){
+  const sug = (c.law_suggest||[]).filter(x=>!(c.law_names||[]).includes(x.name));
+  if(!sug.length) return "";
+  return `<div style="margin-top:4px;font-size:11.5px"><span class="mute">AI 제안 · 누르면 켜기:</span> ` + sug.slice(0,8).map((x,k)=>{
+    const tip = `${x.reason||""}${x.pages&&x.pages.length?` (p.${x.pages.join(", ")})`:""}\n현행 ${x.cur_header||"?"}${x.header?`\n책 기준 ${x.header}`:""}${x.note?`\n${x.note}`:""}`;
+    const tag = x.changed ? '<b class="bad">책 이후 개정</b>' : '<span class="mute">개정 없음</span>';
+    return `<span class="lchip add" title="${esc(tip)}" onclick="useSuggest(${i}, '${esc(x.name).replace(/'/g,"\\'")}')">＋ ${esc(x.name)} <span class="mute">${Math.round(x.conf*100)}%</span> ${tag}</span>`;
+  }).join("") + (sug.length > 8 ? ` <span class="mute">외 ${sug.length-8}개</span>` : "") + `</div>`;
+}
+async function useSuggest(i, name){
+  const c = TOCDRAFT.chapters[i];
+  try{
+    if(!LAWDRAFT.laws.some(l=>l.name===name)){
+      toast(`${name}을(를) 이 책의 법령에 넣고 책 기준 판을 법제처 연혁에서 찾는 중…`, 6000);
+      const j = await api("/api/book/law-add",{method:"POST",body:JSON.stringify({names:[name]})});
+      const keep = TOCDRAFT; APP.toc = j.toc; LAWDRAFT = null; syncDrafts(j.toc); TOCDRAFT = keep;  // 화면에서 고친 차례 초안은 그대로
+    }
+    c.law_names = [...new Set([...(c.law_names||[]), name])]; renderView(true);
+  }catch(e){ toast("실패: "+e.message, 8000) }
+}
+async function lawScan(){
+  if(LAWDIRTY) await saveLaws(false);
+  const n = (APP.toc.chapters||[]).filter(c=>c.include).length;
+  if(!confirm(`제목이 법 이름이 아닌 장마다 판정 엔진(${APP.engines[APP.settings.engine]})을 한 번씩 부릅니다 (최대 ${n}번, 장마다 1~2분).\n다시 누르면 이미 읽은 장은 다시 부르지 않습니다. 진행할까요?`)) return;
+  try{ await api("/api/book/law-scan",{method:"POST"}); toast("AI로 장별 법령을 찾는 중입니다. 끝나면 ③에 「AI 제안」이 뜹니다."); refresh() }catch(e){ toast(e.message, 8000) }
 }
 function toggleLaw(i, k){
   const onLaws = LAWDRAFT.laws.filter(l=>l.checked!==false).map(l=>l.name);
@@ -344,7 +379,8 @@ function addLaw(){
 }
 function addSuggest(i){ const x = LAWDRAFT.suggest.splice(i,1)[0]; LAWDRAFT.laws.push({name:x.name, version:"", checked:true}); lawDirty() }
 async function saveLaws(reattach){
-  try{ const j = await api("/api/book/laws",{method:"POST",body:JSON.stringify({laws:LAWDRAFT.laws, reattach})});
+  if(LAWDRAFT.laws.some(l=>!l.version && l.checked!==false)) toast("버전이 빈 법령을 법제처 연혁에서 찾는 중입니다 (법령당 몇 초)", 8000);
+  try{ const j = await api("/api/book/laws",{method:"POST",body:JSON.stringify({laws:LAWDRAFT.laws, reattach, date:LAWDRAFT.date||""})});
     LAWDIRTY = false; LAWDRAFT = null; if(reattach) TOCDRAFT = null;
     APP.toc = j.toc; renderView(true);
     toast(reattach ? "법령 목록을 저장하고 장마다 다시 연결했습니다. 아래 차례에서 확인 후 확정하세요." : "법령 목록을 저장했습니다.", 5000);
