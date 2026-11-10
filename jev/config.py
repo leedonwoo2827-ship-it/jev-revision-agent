@@ -133,7 +133,9 @@ def slots(c):
             out.append({"slot": f"law_{which}_{law['abbr']}", "label": f"{law['name']} — {tag}",
                         "exts": sorted(SRC_EXTS), "law": law["name"], "which": which, "abbr": law["abbr"],
                         "number": (law.get("old_version") or ",").split(",")[0],
-                        "hint": law.get("old_header", "") if which == "old" else "현행"})
+                        "hint": law.get("old_header", "") if which == "old" else "현행",
+                        # 책 기준 버전을 모르는 법령(직접 추가한 법률 등): 구판 파일을 넣지 않으면 이 법령만 비교에서 빠진다
+                        "optional": not law.get("old_version")})
     return out
 
 

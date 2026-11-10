@@ -254,7 +254,7 @@ function renderBook(force){
       bl.source==="법령적용기준" ? `책 p.${bl.page} [법령적용기준]에서 찾음`
       : bl.source==="법령 원문 머리글" ? `책에 실린 법령 원문 머리글에서 찾음 (p.${bl.page}~)`
       : bl.source==="직접 입력" ? "직접 넣은 목록" : "책에서 기준 버전 표시를 찾지 못했습니다 — 아래에 직접 넣어 주세요"}${LAWDIRTY?' · <b class="bad">저장 안 됨</b>':""}</span></h2>
-    <div class="mute" style="margin-bottom:6px">체크한 법령이 장마다 연결되어 <b>구판(책 기준) ↔ 현행</b>을 비교합니다. 책 기준 버전을 모르면 비워 두세요 (그때는 구판 파일을 장 화면에서 직접 넣습니다).</div>
+    <div class="mute" style="margin-bottom:6px">체크한 법령이 장마다 연결되어 <b>구판(책 기준) ↔ 현행</b>을 비교합니다. 책 기준 버전을 모르면 비워 둘 수 있습니다. 그 법령은 비교에서 빠지고, 구판 파일을 장 화면 구 칸에 넣으면 함께 비교합니다.</div>
     <table id="lawtable"><thead><tr><th style="width:42px">사용</th><th>법령 이름</th><th style="width:230px">책 기준 버전 <span style="font-weight:400">(공포번호,공포일@시행일)</span></th><th style="width:90px">출처</th><th style="width:40px"></th></tr></thead><tbody>
       ${LAWDRAFT.laws.map((l,i)=>`<tr>
         <td><input type="checkbox" ${l.checked!==false?"checked":""} onchange="LAWDRAFT.laws[${i}].checked=this.checked;lawDirty()"></td>
@@ -620,7 +620,9 @@ function slotRows(c){  // 2뎁스: 법령마다 책 기준(구) · 현행(신)
   const laws = [...new Set(c.slots.map(x=>x.law))];
   if(!laws.length) return `<tr class="sub"><td></td><td></td><td></td><td colspan="7" class="mute">연결된 법령이 없습니다. ① 차례에서 법령을 켜거나 장 화면에서 개정기본서 대조로 바꾸세요.</td></tr>`;
   const cell = (law, w) => { const x = c.slots.find(s=>s.law===law && s.which===w);
-    return !x ? "" : x.file ? okTag("✔ "+esc(x.file), x.hint) : `<span class="bad" title="${esc(x.hint||"")}">✖ 없음</span>` };
+    return !x ? "" : x.file ? okTag("✔ "+esc(x.file), x.hint)
+      : x.optional ? noTag("버전 모름 · 비교 안 함", "① 이 책의 법령에 책 기준 버전(공포번호,공포일)을 적거나 장 화면 구 칸에 파일을 넣으면 함께 비교합니다")
+      : `<span class="bad" title="${esc(x.hint||"")}">✖ 없음</span>` };
   return laws.map(l=>`<tr class="sub"><td></td><td></td><td></td><td colspan="2">${esc(l)}</td>
     <td colspan="5"><span class="mute" style="font-size:11px">책 기준(구) </span>${cell(l,"old")} &nbsp; <span class="mute" style="font-size:11px">현행(신) </span>${cell(l,"new")}</td></tr>`).join("");
 }
@@ -734,8 +736,8 @@ function editsCard(){
   const all = ERR.rows, shown = editsShown(), on = all.filter(eOn).length;
   const opt = (v, t, cur) => `<option value="${v}" ${String(cur)===String(v)?"selected":""}>${esc(t)}</option>`;
   const ch = TAB !== "all" && ERR.chapters.find(c=>c.id===TAB);
-  return `<div class="card"><h2>수정 후보 · 체크 <span class="mute" style="font-weight:400">— 체크한 것만 정오표에 들어갑니다. 수정확률 60% 이상은 처음부터 체크되어 있습니다. 정오표는 늘 책 전체 한 번에 나옵니다.</span></h2>
-    <div class="row" style="margin-bottom:4px"><button class="big primary" onclick="exportDoc(true)">체크 끝 → 정오표 만들기 (⑤ 정오표 받기로)</button>
+  return `<div class="card"><h2>수정 후보 · 체크 <span class="mute" style="font-weight:400">— ⑤ 정오표는 수정확률 5단계(전체 · 20 · 40 · 60 · 80% 이상)마다 한 벌씩 나옵니다. 여기서 고친 수정 문구 · 메모가 들어갑니다.</span></h2>
+    <div class="row" style="margin-bottom:4px"><button class="big primary" onclick="exportDoc(true)">정오표 만들기 (⑤ 정오표 받기로)</button>
       <label style="cursor:pointer;border:1px solid var(--line);border-radius:8px;padding:6px 12px" title="정오표 검토 HTML 에서 저장한 .json 이나, 「전체 후보」 시트를 고친 정오표 .xlsx">체크본 가져오기
         <input type="file" accept=".json,.xlsx" hidden onchange="importReview(this.files[0]);this.value=''"></label></div>
     <div class="mute" style="margin:0 0 10px;padding-bottom:10px;border-bottom:1px solid var(--line)">회의할 때는 「정오표_검토.pdf」를 인쇄하거나 「정오표_검토.html」에서 체크한 뒤 [체크 결과 저장] → 여기 「체크본 가져오기」. 엑셀은 「전체 후보」 시트의 반영(O) · 수정 문구 · 메모를 고쳐 올리면 됩니다.</div>
@@ -818,7 +820,7 @@ async function exportDoc(go){
   clearTimeout(decTimer); decTimer = null;
   toast("정오표를 만드는 중입니다…", 20000);
   try{ const j = await api("/api/export",{method:"POST",body:JSON.stringify({decisions:DEC})});
-    toast(`정오표를 만들었습니다 (체크 ${j.checked}건 / 후보 ${j.total}건). 아래에서 받으세요.`, 7000);
+    toast(`정오표를 만들었습니다 (${j.levels.map(l=>`${l.name} ${l.n}건`).join(" · ")}). 아래에서 받으세요.`, 7000);
     if(go && route().view !== "download") location.hash = "#/download";
     else { await refresh(); viewKey = null; renderView(true) }
   }catch(e){ toast(e.message, 9000) }
@@ -833,33 +835,33 @@ function renderDownload(force){
   $("view").innerHTML = errHead("⑤ 정오표 받기") + (ERR.rows.length ? getCard()
     : `<div class="card empty">아직 정오표를 만들 수정 후보가 없습니다. <a href="#/judge">② 장별 판정</a>에서 판정을 돌리세요.</div>`);
 }
+// 수정확률 5단계(④ 필터와 같은 단계)마다 파일 한 벌 — 한 줄에 엑셀 · PDF · 브라우저 · HTML · zip
 function getCard(){
-  const fs = APP.errata.files, f = suf => fs.find(x => x.name.endsWith(suf));
+  const fs = APP.errata.files, levels = ERR.levels || [];
+  const f = (tag, suf) => fs.find(x => x.name.endsWith(`_${tag}_정오표${suf}`));
   const url = (x, dl) => `/errata-files/${encodeURIComponent(x.name)}${dl?"?dl=1":""}`;
   const tile = (x, icon, name, sub, dl, main) => x ? `<a class="${main?"main":""}" href="${url(x, dl)}" ${dl?"":'target="_blank"'}><b>${icon} ${name}</b><span>${sub}</span></a>` : "";
-  const on = ERR.rows.filter(eOn).length;
-  if(!f("_정오표.xlsx")) return `<div class="card"><h2>정오표 받기</h2>
-    <div class="row"><span>아직 정오표 파일을 만들지 않았습니다. 지금 체크된 <b>${on}건</b>으로 만듭니다.</span>
+  const first = levels.length && f(levels[0].tag, ".xlsx");
+  if(!first) return `<div class="card"><h2>정오표 받기</h2>
+    <div class="row"><span>아직 정오표 파일을 만들지 않았습니다. 수정확률 5단계(확률 전체 · 20 · 40 · 60 · 80% 이상)마다 한 벌씩 만듭니다.</span>
     <button class="big primary" onclick="exportDoc()">정오표 만들기</button></div></div>`;
-  return `<div class="card"><h2>정오표 받기 <span class="mute" style="font-weight:400">— 책 전체 한 번에 · ${esc(f("_정오표.xlsx").time)}에 만든 파일</span></h2>
-    ${APP.errata.stale ? `<div class="alert" style="margin:0 0 8px"><b>체크를 바꾼 뒤 아직 파일을 다시 만들지 않았습니다.</b> 아래 파일은 바꾸기 전 내용입니다.
-      <button class="primary" style="margin-left:8px" onclick="exportDoc()">지금 체크(${on}건)로 다시 만들기</button></div>` : ""}
+  const rowsHtml = levels.map(lv => {
+    const n = ERR.rows.filter(e => e.p >= lv.p).length;
+    return `<div style="margin-top:14px"><div style="margin-bottom:6px"><b style="font-size:15px">${esc(lv.name)}</b> <span class="mute">· 후보 ${n}건</span></div>
     <div class="dl">
-      ${tile(f("_정오표.xlsx"), "📊", "엑셀 정오표", "체크한 것 + 전체 후보 · 저자에게 보내기", true, true)}
-      ${tile(f("_정오표_검토.pdf"), "🖨", "PDF 정오표", "인쇄해서 회의 · 체크칸 · 메모칸", false)}
-      ${tile(f("_정오표_검토.html"), "✔", "브라우저 체크하기", "브라우저에서 체크 → [체크 결과 저장]", false)}
-      ${tile(f("_정오표_게시판.html"), "📋", "HTML 정오표", "체크한 것만 · 게시판에 붙이기", false)}
-      <a href="/zip"><b>⬇ 전부 한 번에 받기</b><span>위 파일 모두 · zip 하나</span></a>
-    </div>
-    <div class="row" style="margin-top:8px"><button class="iconbtn" onclick="exportDoc()">지금 체크(${on}건)로 다시 만들기</button>
-      <button class="iconbtn" onclick="openErrataDir()">폴더 열기</button></div></div>
-    <div class="card"><h2>이렇게 쓰세요</h2>
-      <ol style="margin:0;padding-left:20px;line-height:1.9">
-        <li><b>저자에게 보낼 때</b> — 「엑셀 정오표」를 받아 메일에 붙이세요. 첫 시트가 정오표이고, 원고에서 위치를 못 찾은 줄은 「확인」 칸에 표시됩니다.</li>
-        <li><b>회의할 때</b> — 「PDF 정오표」를 인쇄해 체크칸에 표시하거나, 「브라우저 체크하기」로 같이 보며 체크한 뒤 [체크 결과 저장]을 누르세요.</li>
-        <li><b>체크한 것을 다시 올릴 때</b> — ④ 정오 판정 위쪽 「체크본 가져오기」로 저장한 파일(.json · .xlsx)을 고른 뒤, 여기서 [다시 만들기]를 누르세요.</li>
-        <li><b>회사 게시판</b> — 「HTML 정오표」를 열어 내용을 복사해 붙이세요. 장마다 표가 나뉘고 법령 구·신 버전이 함께 나옵니다.</li>
-      </ol></div>`;
+      ${tile(f(lv.tag, ".xlsx"), "📊", "엑셀 정오표", "저자에게 보내기", true, lv.p === .6)}
+      ${tile(f(lv.tag, "_검토.pdf"), "🖨", "PDF 정오표", "인쇄해서 회의 · 메모칸", false)}
+      ${tile(f(lv.tag, "_검토.html"), "✔", "브라우저 체크하기", "같이 보며 고친 뒤 [체크 결과 저장]", false)}
+      ${tile(f(lv.tag, "_게시판.html"), "📋", "HTML 정오표", "게시판에 붙이기", false)}
+      <a href="/zip?level=${encodeURIComponent(lv.tag)}"><b>⬇ 이 줄 한 번에 받기</b><span>위 파일 모두 · zip 하나</span></a>
+    </div></div>`;
+  }).join("");
+  return `<div class="card"><h2>정오표 받기 <span class="mute" style="font-weight:400">— 수정확률 단계마다 한 줄 · 그 단계 이상인 후보가 모두 들어갑니다 · ${esc(first.time)}에 만든 파일</span></h2>
+    ${APP.errata.stale ? `<div class="alert" style="margin:0 0 8px"><b>④에서 고친 뒤 아직 파일을 다시 만들지 않았습니다.</b> 아래 파일은 고치기 전 내용입니다.
+      <button class="primary" style="margin-left:8px" onclick="exportDoc()">다시 만들기</button></div>` : ""}
+    ${rowsHtml}
+    <div class="row" style="margin-top:14px"><button class="iconbtn" onclick="exportDoc()">다시 만들기</button>
+      <button class="iconbtn" onclick="openErrataDir()">폴더 열기</button></div></div>`;
 }
 
 window.addEventListener("dragover", e=>e.preventDefault());

@@ -112,15 +112,22 @@ def fetch_chapter(cid, only_missing=False, fresh=None):
     if not c.get("laws"):
         raise SystemExit("이 장에 연결된 법령이 없습니다. 차례 화면에서 법령을 확인하세요.")
     d = config.stage(cid, "01_비교자료")
+    fail = []
     for law in c["laws"]:
         name = law.get("fetch_name") or law["name"].replace(" ", "")
         for which, ver in (("new", None), ("old", law.get("old_version"))):
             if only_missing and config.source(cid, f"law_{which}_{law['abbr']}"):
                 continue
             if which == "old" and not ver:
-                print(f"[받기] {law['name']}: 책 기준 버전 정보가 없어 구판은 건너뜀")
+                print(f"[받기] {law['name']}: 책 기준 버전 정보가 없어 구판은 건너뜀 (이 법령은 비교에서 빠짐)")
                 continue
-            text = cached(name, ver, refresh=which == "new" and fresh is not None and name not in fresh)
+            try:
+                text = cached(name, ver, refresh=which == "new" and fresh is not None and name not in fresh)
+            except (SystemExit, OSError) as e:  # 한 법령 실패(예: 없는 시행규칙)가 나머지를 막지 않게
+                print(f"[받기] 실패: {law['name']} {'현행' if which == 'new' else ver} — {e}")
+                if law.get("old_version"):  # 책 기준 버전이 있는 법령(=꼭 비교할 법령)만 실패로 센다
+                    fail.append(law["name"])
+                break
             if which == "new" and fresh is not None:
                 fresh.add(name)
             slot = f"law_{which}_{law['abbr']}"
@@ -128,6 +135,8 @@ def fetch_chapter(cid, only_missing=False, fresh=None):
             others = [p.name for p in d.glob(f"{slot}.*") if p.suffix.lower() in (".pdf", ".hwpx")]
             note = f"  (※ {', '.join(others)} 이(가) 있어 그 파일이 우선 사용됩니다)" if others else ""
             print(f"[받기] → 01_비교자료/{slot}.txt ({len(text):,}자){note}")
+    if fail:
+        raise SystemExit(f"법제처에서 받지 못한 법령: {', '.join(fail)} — 해당 칸에 법제처 PDF를 직접 넣어 주세요.")
 
 
 if __name__ == "__main__":

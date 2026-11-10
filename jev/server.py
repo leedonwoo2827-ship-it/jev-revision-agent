@@ -154,14 +154,15 @@ def chapter_brief(c, dec=None, made=None):
     """made = 책 전체 정오표(xlsx)를 만든 시각(mtime). 그 뒤에 다시 판정한 장은 정오표에 아직 안 들어간 것."""
     cid = c["id"]
     sl = chapter_slots(cid, c)
+    need = [s for s in sl if s["file"] or not s.get("optional")]  # 버전 모르는 구판 빈칸은 모자람으로 안 셈
     r = results(cid, dec)
     applied = list(config.stage(cid, "05_반영").glob("정오표_게시판_*.html"))
     return {"id": cid, "title": c["title"], "pages": c["pages"], "mode": c.get("mode", "law"),
-            "kind": c.get("kind", "chapter"), "sources": [sum(bool(s["file"]) for s in sl), len(sl)],
+            "kind": c.get("kind", "chapter"), "sources": [sum(bool(s["file"]) for s in need), len(need)],
             "revise": r["revise"] if r else None, "applied": len(applied),
             "result": {k: r[k] for k in ("changes", "rows", "revise", "checked", "failed", "updated")} if r else None,
             "in_errata": bool(r and made and made >= r["mtime"]),
-            "slots": [{k: x.get(k) for k in ("law", "which", "label", "file", "hint")} for x in sl],
+            "slots": [{k: x.get(k) for k in ("law", "which", "label", "file", "hint", "optional")} for x in sl],
             "ref_pages": c.get("ref_pages")}
 
 

@@ -2,10 +2,12 @@
 
 workspace/_정오표/
   decisions.json               체크 · 직접 고친 수정 문구 · 메모 ({"09-3": {apply, new_text?, note?}}, 없는 키 = 기본값)
-  <책>_정오표.xlsx              [정오표] 체크한 것 · [전체 후보] 반영(O) · 수정 문구 · 메모를 고쳐 다시 올릴 수 있음 · [요약]
-  <책>_정오표_검토.pdf          회의용 종이 (☑/☐ · 메모칸)
-  <책>_정오표_검토.html         브라우저에서 체크 → [체크 결과 저장] → 콘솔 「체크본 가져오기」
-  <책>_정오표_게시판.html       체크한 것만, 장 · 쪽 순 (회사 게시판용)
+  ⑤ 정오표 받기는 수정확률 5단계(<단계> = 전체 · 20이상 · 40이상 · 60이상 · 80이상)마다 한 벌씩.
+  단계 안의 후보는 ④ 체크와 상관없이 모두 넣고, ④에서 고친 수정 문구 · 메모는 반영한다.
+  <책>_<단계>_정오표.xlsx           [정오표] 그 단계 후보 · [전체 후보] 반영(O) · 수정 문구 · 메모 · [요약]
+  <책>_<단계>_정오표_검토.pdf       회의용 종이 (☑/☐ · 메모칸)
+  <책>_<단계>_정오표_검토.html      브라우저에서 수정 문구 · 메모 고침 → [체크 결과 저장] → 콘솔 「체크본 가져오기」
+  <책>_<단계>_정오표_게시판.html    장 · 쪽 순 (회사 게시판용)
 
 행 ID 는 '<장>-<장 안 번호>' (예: 09-3). 장 안 번호는 판정할 때마다 다시 매겨지므로, 다시 판정한 장의 체크는 기본값으로 돌아간다.
 """
@@ -84,6 +86,18 @@ def files():
             for p in sorted(DIR.glob("*정오표*"), key=lambda p: -p.stat().st_mtime) if p.is_file()]
 
 
+LEVELS = (0, .2, .4, .6, .8)  # ⑤ 정오표 받기의 5줄 (④ 확률 필터와 같은 5단계)
+
+
+def level_tag(p):
+    """파일 이름에 넣는 단계 표시: 전체 · 20이상 · 40이상 …"""
+    return "전체" if not p else f"{round(p * 100)}이상"
+
+
+def level_name(p):
+    return "확률 전체" if not p else f"{p:.0%} 이상"
+
+
 def stale():
     """체크를 바꾼 뒤 정오표를 아직 다시 만들지 않았나."""
     d = DIR / "decisions.json"
@@ -94,7 +108,8 @@ def stale():
 def state():
     rs, chs = rows()
     return {"rows": rs, "chapters": chs, "decisions": load_decisions(), "files": files(), "stale": stale(),
-            "book": book_name(), "dir": str(DIR)}
+            "book": book_name(), "dir": str(DIR),
+            "levels": [{"p": p, "tag": level_tag(p), "name": level_name(p)} for p in LEVELS]}
 
 
 # ---------- 바뀐 글자만 색칠 ----------
@@ -193,7 +208,7 @@ def board_html(book, chs, on):
 
 
 def review_html(book, data):
-    """검토용 정오표 (후보 전부). 체크 · 수정 문구 · 메모를 고치고 [체크 결과 저장] → 콘솔 「체크본 가져오기」."""
+    """검토용 정오표 (체크한 것만 — 정오표 시트와 같은 줄). 체크 · 수정 문구 · 메모를 고치고 [체크 결과 저장] → 콘솔 「체크본 가져오기」."""
     esc = html.escape
     body = "".join(
         f"<tr data-id='{esc(r['id'])}'><td class=c><input type=checkbox {'checked' if r['on'] else ''}></td>"
@@ -206,7 +221,8 @@ def review_html(book, data):
 .bar{{position:sticky;top:0;background:#fff;padding:8px 0;border-bottom:1px solid #ddd;margin-bottom:8px}}
 button{{font:inherit;padding:4px 10px;margin-right:4px}}@media print{{.bar{{display:none}}}}</style></head><body>
 <h2>{esc(book)} — 정오표 검토</h2>
-<p class=s>{datetime.now():%Y-%m-%d %H:%M} · 후보 {len(data)}건 · 체크 = 반영. 수정 문구와 메모 칸은 눌러서 고칠 수 있습니다.
+<p class=s>{datetime.now():%Y-%m-%d %H:%M} · 정오표 {len(data)}건 · 체크 = 반영(빼려면 체크 해제). 수정 문구와 메모 칸은 눌러서 고칠 수 있습니다.
+ 전체 후보는 엑셀 「전체 후보」 시트나 콘솔 ④에서 봅니다.
  다 고치면 [체크 결과 저장] → 받은 파일을 JEV 콘솔 ④ 정오 판정의 「체크본 가져오기」로 올리세요. 종이로 회의하려면 인쇄(PDF로 저장).</p>
 <div class=bar><button onclick="save()">체크 결과 저장 (JSON)</button><button onclick="print()">인쇄 · PDF로 저장</button>
  <label><input type=checkbox id=only onchange="only()"> 체크한 것만 보기</label> <span id=n class=s></span></div>
@@ -228,15 +244,15 @@ MEMO_PAD = "&#160;" * 40  # PDF 표는 내용 길이로 열 너비를 정한다 
 
 
 def review_pdf(path, book, data):
-    """회의용 종이 정오표 (후보 전부, 체크칸 ☐/☑ · 빈 메모칸)."""
+    """회의용 종이 정오표 (체크한 것만 — 정오표 시트와 같은 줄, 체크칸 ☐/☑ · 빈 메모칸)."""
     import pymupdf
     esc = html.escape
     body = "".join(f"<tr><td class=c>{'☑' if r['on'] else '☐'}</td><td class=c>{esc(r['id'])}</td><td class=s>{_where(r)}</td>"
                    f"<td>{_pair(r)[0]}</td><td>{_pair(r)[1]}</td>"
                    f"<td class=c>{r['p']:.0%}</td><td class=s>{esc(r['judge_type'])}</td><td>{esc(r['note']) or MEMO_PAD}</td></tr>"
                    for r in data)
-    doc = (f"<h3>{esc(book)} — 정오표 검토</h3><p class=s>{datetime.now():%Y-%m-%d} · 후보 {len(data)}건 · ☑ = 반영(지금 체크). "
-           f"고칠 것은 체크칸에 표시하고 메모칸에 적어 주세요.</p>"
+    doc = (f"<h3>{esc(book)} — 정오표 검토</h3><p class=s>{datetime.now():%Y-%m-%d} · 정오표 {len(data)}건 · ☑ = 반영(지금 체크). "
+           f"뺄 것은 체크칸에 ✕, 고칠 것은 메모칸에 적어 주세요. 전체 후보는 엑셀 「전체 후보」 시트에 있습니다.</p>"
            "<table><tr><th width=4%>반영</th><th width=5%>ID</th><th width=12%>장 · 쪽 · 조문</th><th width=26%>기존 문구</th>"
            f"<th width=26%>수정 문구</th><th width=5%>확률</th><th width=7%>유형</th><th width=15%>메모</th></tr>{body}</table>")
     css = ("@font-face{font-family:malgun;src:url(malgun.ttf);}\n*{font-family:malgun}\n"
@@ -293,27 +309,43 @@ def import_review(data, filename):
 
 
 def run(decisions=None):
-    """체크한 대로 책 전체 정오표를 만든다."""
+    """수정확률 5단계(전체 · 20 · 40 · 60 · 80% 이상)마다 책 전체 정오표 한 벌씩 만든다.
+    단계 안의 후보는 ④ 체크와 상관없이 모두 넣고, ④에서 고친 수정 문구 · 메모는 반영한다."""
     if decisions is not None:
         save_decisions(decisions)
     dec = load_decisions()
     rs, chs = rows()
     if not rs:
         raise ValueError("아직 판정한 장이 없습니다. ② 장별 판정에서 판정을 먼저 돌리세요.")
+    DIR.mkdir(parents=True, exist_ok=True)
+    book = book_name()
+    for p in DIR.glob(f"{book}_정오표*"):  # 단계 구분 전 이름으로 만든 예전 파일 — 헷갈리지 않게 지운다
+        p.unlink()
+    made, levels = [], []
+    for p in LEVELS:
+        files_, n = _run_level(book, rs, chs, dec, p)
+        made += files_
+        levels.append({"p": p, "tag": level_tag(p), "name": level_name(p), "n": n})
+    print(f"[정오표] 5단계 {len(made)}개 파일 → {DIR}")
+    return {"files": made, "levels": levels, "total": len(rs)}
+
+
+def _run_level(book, rs, chs, dec, min_p):
+    """한 단계(수정확률 min_p 이상)의 정오표 파일 한 벌 → (파일 이름들, 정오표 줄 수)."""
     data = []
     for r in rs:
-        on, new, note = edit_on(r, dec)
-        data.append({**r, "on": bool(on), "new": new, "note": note, "status": ""})
-    # 원고에서 위치 확인 (체크한 것만) — 장 원고 그대로 찾기, 못 찾으면 '수동 확인'
+        _, new, note = edit_on(r, dec)
+        data.append({**r, "on": r["p"] >= min_p, "new": new, "note": note, "status": ""})
+    # 원고에서 위치 확인 (넣는 것만) — 장 원고 그대로 찾기, 못 찾으면 '수동 확인'
     for c in chs:
         mine = {r["rid"]: r for r in data if r["ch"] == c["id"]}
         _, _, records, _, _ = apply.resolve(c["id"], {k: {"apply": r["on"], "new_text": r["new"]} for k, r in mine.items()})
         for rec in records:
             if rec["id"] in mine and rec["apply"]:
                 mine[rec["id"]]["status"] = rec["status"]
-    on = [r for r in data if r["on"] and r["status"] != "변경없음"]
-    book = book_name()
-    DIR.mkdir(parents=True, exist_ok=True)
+    on = [r for r in data if r["on"]]  # ④ 필터 숫자와 같게 — 고칠 글자가 없는 '유지' 줄도 넣고 「확인」 칸에 표시
+    name = lambda suf: f"{book}_{level_tag(min_p)}_정오표{suf}"  # 예: 책_60이상_정오표.xlsx
+    label = f"{book} · {level_name(min_p)}"
     made = []
 
     wb = Workbook()
@@ -321,6 +353,7 @@ def run(decisions=None):
             ("영향유형", 11), ("사유", 40), ("메모", 24), ("확인", 18)]
     pick = lambda r: [r["id"], f"{r['ch']} {r['ch_title']}", r["page"] or "", _art(r), *_rich(r), f"{r['p']:.0%}",
                       r["judge_type"], r["reason"], r["note"],
+                      "고칠 글자 없음(유지)" if r["status"] == "변경없음" else
                       "" if not r["status"] or r["status"] in DONE else r["status"]]
     ws = wb.active
     ws.title = "정오표"
@@ -328,23 +361,24 @@ def run(decisions=None):
     # 「전체 후보」의 반영(O) · 수정 문구 · 메모를 고쳐 콘솔 「체크본 가져오기」로 올리면 그대로 반영된다
     _sheet(wb.create_sheet("전체 후보"), [("반영", 6)] + cols, [["O" if r["on"] else ""] + pick(r) for r in data])
     summary = [["책", book], ["만든 때", datetime.now().strftime("%Y-%m-%d %H:%M")],
-               ["정오표", f"체크 {sum(r['on'] for r in data)}건 / 후보 {len(data)}건"],
+               ["정오표", f"수정확률 {level_name(min_p)} {sum(r['on'] for r in data)}건 / 후보 {len(data)}건"],
                ["원고에서 직접 확인", f"{sum(1 for r in on if r['status'] and r['status'] not in DONE)}건 (정오표 시트 '확인' 칸)"]]
     for c in chs:
         mine = [r for r in data if r["ch"] == c["id"]]
-        summary.append([f"{c['id']} {c['title']}", f"후보 {len(mine)} · 체크 {sum(r['on'] for r in mine)}"
+        summary.append([f"{c['id']} {c['title']}", f"후보 {len(mine)} · 정오표 {sum(r['on'] for r in mine)}"
                         + "".join(f"\n{l['name']}: {l.get('old_header', '')} → {l.get('new_header', '')}" for l in c["laws"])])
     _sheet(wb.create_sheet("요약"), [("항목", 26), ("내용", 90)], summary)
-    wb.save(DIR / f"{book}_정오표.xlsx")
-    made.append(f"{book}_정오표.xlsx")
+    wb.save(DIR / name(".xlsx"))
+    made.append(name(".xlsx"))
 
-    (DIR / f"{book}_정오표_게시판.html").write_text(board_html(book, chs, on), encoding="utf-8")
-    (DIR / f"{book}_정오표_검토.html").write_text(review_html(book, data), encoding="utf-8")
-    made += [f"{book}_정오표_검토.html", f"{book}_정오표_게시판.html"]
+    # 검토 HTML · PDF · 게시판도 엑셀 정오표 시트와 같은 줄만 — 전체 후보는 엑셀 「전체 후보」 시트와 ④ 화면에서
+    (DIR / name("_게시판.html")).write_text(board_html(label, chs, on), encoding="utf-8")
+    (DIR / name("_검토.html")).write_text(review_html(label, on), encoding="utf-8")
+    made += [name("_검토.html"), name("_게시판.html")]
     try:
-        review_pdf(DIR / f"{book}_정오표_검토.pdf", book, data)
-        made.append(f"{book}_정오표_검토.pdf")
+        review_pdf(DIR / name("_검토.pdf"), label, on)
+        made.append(name("_검토.pdf"))
     except Exception as e:  # 글꼴이 없는 PC 등 — 검토 HTML 을 인쇄하면 같은 종이가 나온다
         print(f"  [정오표] PDF는 만들지 못했습니다 ({e}). 검토 HTML 을 열어 인쇄 → PDF로 저장하세요.")
-    print(f"[정오표] {', '.join(made)} → {DIR}")
-    return {"files": made, "checked": len(on), "total": len(data)}
+    print(f"[정오표] {level_name(min_p)}: {len(on)}건")
+    return made, len(on)

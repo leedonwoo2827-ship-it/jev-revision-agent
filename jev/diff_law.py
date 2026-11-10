@@ -22,10 +22,14 @@ def article_sort_key(k):
 
 
 def run_law(cid, c):
-    changes, laws, missing = [], [], []
+    changes, laws, missing, skipped = [], [], [], []
     for law in c.get("laws", []):
         old_p = config.source(cid, f"law_old_{law['abbr']}")
         new_p = config.source(cid, f"law_new_{law['abbr']}")
+        if not old_p and not law.get("old_version"):
+            # 책 기준 버전을 모르는 법령(직접 추가한 법률 등) — 이 법령만 빼고 나머지로 판정한다
+            skipped.append(law["name"])
+            continue
         if not old_p or not new_p:
             missing += [f"{law['name']} {w}" for w, f in (("구(책 기준)", old_p), ("현행", new_p)) if not f]
             continue
@@ -55,6 +59,11 @@ def run_law(cid, c):
                             "old": a["text"] if a else "", "new": b["text"] if b else "", "diff": diff})
     if not c.get("laws"):
         missing.append("이 장에 연결된 법령이 없습니다 (차례 화면에서 법령을 확인하거나 개정기본서 방식을 쓰세요)")
+    if skipped:
+        print(f"[비교] 책 기준(구) 버전을 몰라 비교에서 뺌: {', '.join(skipped)} "
+              "— ① 이 책의 법령에 공포번호,공포일을 적거나 장 화면 구 칸에 파일을 넣으면 함께 비교합니다")
+        if not laws and not missing:
+            missing.append(f"비교할 수 있는 법령이 없습니다 (책 기준 버전 모름: {', '.join(skipped)})")
     for l in laws:
         print(f"[비교] {l['name']}: 구 {l['old_header']} → 신 {l['new_header']}")
     return {"mode": "law", "laws": laws, "changes": changes}, missing
