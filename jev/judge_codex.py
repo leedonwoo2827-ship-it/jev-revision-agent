@@ -75,6 +75,18 @@ PROMPT = """너는 수험서 법령 교재의 개정 검수 편집자다. 아래
 """
 
 
+EXAM_NOTE = """[이 장은 기출문제다 — 아래가 위 규칙보다 우선]
+- 문제·보기 문장은 시험 당시 법 기준으로 출제된 것이므로, 문장 자체를 신법에 맞게 고치는 항목은 내지 않는다.
+- 이 개정으로 정답이 바뀌거나, 보기의 옳고 그름이 달라지거나, 해설이 현행법과 틀려지는 곳만 항목으로 낸다.
+  문제가 「…법령상」처럼 법·시행령·시행규칙을 묶어 묻고 조문 번호가 없어도, 내용으로 찾아 판단한다.
+- 그런 곳은 old_text 를 해설(해설이 없으면 그 문제의 마지막 보기) 문장 그대로, new_text 를 그 문장 끝에
+  ' (법 개정으로 현재는 …)' 처럼 짧은 주석을 붙인 문구로 낸다.
+- reason 에 시험 당시 정답과 현행 기준 정답(또는 달라진 보기)을 함께 적는다.
+
+"""
+
+EXAM_RE = re.compile(r"기출|모의")
+
 BOOK_PROMPT = """너는 수험서 법령 교재의 개정 검수 편집자다. [우리 교재 구간]을 [신규 개정기본서]와 대조하라.
 개정기본서가 최신 법령 기준이다. 우리 교재 서술 중 개정기본서와 달라(구 법령 기준으로 남아) 고쳐야 할 곳을 JEV 방식으로 판정하라.
 
@@ -262,9 +274,12 @@ def run(cid, workers=3, model=None, limit=None):
                                       ref=ch_data["laws"][0]["ref_text"])
         hint = [p["page"] for p in book["pages"]
                 if f"{re.sub(r'[0-9]', '', chg['abbr'])} {chg['article']}" in p["law_refs"]] or "없음"
-        return PROMPT.format(hint=hint, law=chg["law"], article=chg["article"], title=chg["title"],
-                             kind=chg["kind"], old=chg["old"] or "(없음)", new=chg["new"] or "(없음)",
-                             diff=chg["diff"], ch_title=c["title"], book=book_text)
+        p = PROMPT.format(hint=hint, law=chg["law"], article=chg["article"], title=chg["title"],
+                          kind=chg["kind"], old=chg["old"] or "(없음)", new=chg["new"] or "(없음)",
+                          diff=chg["diff"], ch_title=c["title"], book=book_text)
+        if EXAM_RE.search(c["title"]):  # 기출 장만 — 다른 장 프롬프트(=캐시 키)는 그대로
+            p = p.replace("참고: 교재에", EXAM_NOTE + "참고: 교재에", 1)
+        return p
 
     from . import llm
     halt = threading.Event()  # 로그인 만료 · 한도 · 멈춤이면 아직 시작 안 한 조문은 부르지 않는다

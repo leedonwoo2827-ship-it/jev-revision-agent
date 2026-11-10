@@ -28,7 +28,7 @@
   POST /api/export               ⑤ 책 전체 정오표 만들기
   POST /api/errata/open          _정오표 폴더 열기
   GET  /errata-files/<name>[?dl=1]
-  GET  /zip                      정오표 파일 모두 zip
+  GET  /zip[?level=60이상]       정오표 파일 zip (level 을 주면 그 단계 한 벌만)
   GET  /review/<id>              장별 검토 내역 화면 (예전 방식)
   POST /apply                    장별 [반영] (예전 방식)
   GET  /files/<id>/<stage>/<name>[?dl=1]
@@ -165,6 +165,19 @@ def chapter_brief(c, dec=None, made=None):
             "ref_pages": c.get("ref_pages")}
 
 
+def book_toc(pdf):
+    """toc.json — 제안 목록 규칙이 바뀌었으면(예: 「…법률」 추가) 이미 넣은 책도 한 번 다시 훑어 저장."""
+    t = config.toc()
+    bl = (t or {}).get("baseline")
+    if bl is not None and pdf and bl.get("scan_v") != toc.SCAN_V:
+        try:
+            toc.rescan_suggest(bl, pdf)
+            config.save_toc(t)
+        except Exception as e:  # 제안 목록일 뿐 — 실패해도 화면은 뜨게
+            print(f"[차례] 법령 제안 다시 훑기 실패: {e}")
+    return t
+
+
 def app_state():
     pdf = config.book_pdf()
     dec = errata.load_decisions()
@@ -172,7 +185,7 @@ def app_state():
         if config.ERRATA_DIR.exists() else None
     return {"workspace": str(config.WS),
             "book": {"file": pdf.name, "size": pdf.stat().st_size} if pdf else None,
-            "toc": config.toc(),
+            "toc": book_toc(pdf),
             "chapters": [chapter_brief(c, dec, made) for c in config.chapters()],
             "backups": config.backups(),
             "job": JOB.state(),
@@ -298,11 +311,13 @@ def judge_one(cid):
         print(f"[판정] 멈춤 — 끝난 조문은 기억해 두므로 [판정 시작]을 다시 누르면 이어서 합니다.")
 
 
-def errata_zip():
+def errata_zip(tag=""):
+    """정오표 파일 zip — tag(전체 · 20이상 …)를 주면 그 단계 한 벌만."""
     buf = BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
         for f in errata.files():
-            z.write(config.ERRATA_DIR / f["name"], f["name"])
+            if not tag or f"_{tag}_정오표" in f["name"]:
+                z.write(config.ERRATA_DIR / f["name"], f["name"])
     return buf.getvalue()
 
 
@@ -465,8 +480,9 @@ class H(BaseHTTPRequestHandler):
             if path == "/api/errata":
                 return self._send(200, errata.state())
             if path == "/zip":
-                name = f"{errata.book_name()}_정오표_전체.zip"
-                return self._send(200, errata_zip(), "application/zip",
+                tag = q.get("level", "")
+                name = f"{errata.book_name()}_{tag or '5단계'}_정오표.zip"
+                return self._send(200, errata_zip(tag), "application/zip",
                                   {"Content-Disposition": "attachment; filename*=UTF-8''" + urllib.parse.quote(name)})
             if path.startswith("/errata-files/"):
                 f = (config.ERRATA_DIR / path.split("/", 2)[2]).resolve()

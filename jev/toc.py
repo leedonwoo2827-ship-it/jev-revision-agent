@@ -144,7 +144,7 @@ def parse_law_headers(texts):
             if not m or not s.startswith("[시행 ") or k == 0:
                 continue
             name = re.sub(r"^\d{1,2}\s+", "", lines[k - 1]).strip()
-            if not re.search(r"(법|령|규칙)$", name) or len(name) > 40 or name in seen:
+            if not re.search(r"(법률|법|령|규칙)$", name) or len(name) > 40 or name in seen:
                 continue
             seen.add(name)
             laws.append({"name": name, "header": m.group(0), "line": f"{name} {m.group(0)}",
@@ -161,12 +161,16 @@ def law_family(name):
     return n, "법"
 
 
+SCAN_V = 2  # 제안 목록 규칙 버전 — 올리면 이미 넣은 책도 한 번 다시 훑는다 (2: 「…법률」 포함)
+
+
 def scan_laws(texts, known=()):
-    """책 본문에 나오는 법령 이름과 언급 횟수. known 에 없는 것은 체크 해제 상태로 제안."""
+    """책 본문에 나오는 법령 이름과 언급 횟수. known 에 없는 것은 체크 해제 상태로 제안.
+    「경비업법」뿐 아니라 「대통령 등의 경호에 관한 법률」처럼 '법률'로 끝나는 이름도."""
     body = "\n".join(texts)
     cnt = {}
-    for m in re.finditer(r"「\s*([^」\n]{2,30}?(?:법|령|규칙))\s*」", body):
-        n = m.group(1).strip()
+    for m in re.finditer(r"「\s*([^」\n]{2,40}?(?:법률|법|령|규칙))\s*」", body):
+        n = re.sub(r"\s*[․·・ㆍ]\s*", "ㆍ", m.group(1).strip())  # PDF 가운뎃점 → 법제처 법령명 표기(ㆍ)
         cnt[n] = cnt.get(n, 0) + 1
     fams = {law_family(k)[0] for k in known}
     out = []
@@ -188,6 +192,14 @@ def build_baseline(texts):
     for law in bl["laws"]:
         law.setdefault("checked", True)
     bl["suggest"] = scan_laws(texts, [l["name"] for l in bl["laws"]])
+    bl["scan_v"] = SCAN_V
+    return bl
+
+
+def rescan_suggest(bl, pdf):
+    """이미 넣은 책의 제안 목록을 지금 규칙으로 다시 훑는다 (목록에 넣은 법령은 빼고)."""
+    bl["suggest"] = scan_laws(_pages(fitz.open(pdf)), [l["name"] for l in bl.get("laws", [])])
+    bl["scan_v"] = SCAN_V
     return bl
 
 
@@ -231,8 +243,11 @@ def attach_laws(entries, baseline, book_name=""):
         elif tt in fams:
             names = [n for n, f in fam_of.items() if f == tt]
         elif re.search(r"관련\s*법령|법령\s*원문", e["title"]):
-            names = list(fam_of)
-        elif re.search(r"기출|모의|부록", e["title"]) or e.get("kind") == "appendix":
+            # 책에 원문이 실린 법령만 (직접 추가한 법령은 원문이 없으니 빼고) — 없으면 전체
+            names = [l["name"] for l in laws if l.get("page")] or list(fam_of)
+        elif re.search(r"기출|모의", e["title"]):
+            names = list(fam_of)  # 기출은 「…법령상」처럼 법·령·규칙을 묶어 묻고 다른 법률도 나온다 → 전부
+        elif re.search(r"부록", e["title"]) or e.get("kind") == "appendix":
             names = []
         else:
             names = [n for n, f in fam_of.items() if f == main]
